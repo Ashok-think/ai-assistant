@@ -1,0 +1,15 @@
+.next
+node_modules
+jarvish.db
+jarvish.db-*
+*.db
+*.db-journal
+.env
+.env*.local
+*.tsbuildinfo
+# Playwright persistent Chromium profile — holds cookies/sessions, private + large
+.jarvish-browser-profile/
+# OS/editor
+.DS_Store
+Thumbs.db
+*.log

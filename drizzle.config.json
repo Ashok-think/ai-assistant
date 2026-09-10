@@ -1,0 +1,8 @@
+{
+  "dialect": "turso",
+  "schema": "./src/db/schema.ts",
+  "out": "./drizzle",
+  "dbCredentials": {
+    "url": "file:./jarvish.db"
+  }
+}

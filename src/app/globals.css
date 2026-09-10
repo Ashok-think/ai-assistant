@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #05060f;
+  --panel: rgba(15, 18, 38, 0.72);
+  --line: rgba(120, 140, 255, 0.18);
+  --glow: #22d3ee;
+  --accent: #a78bfa;
+  --text: #e6e9ff;
+  --muted: #8b90b8;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100%;
+}
+
+body {
+  background-image:
+    radial-gradient(1200px 600px at 10% -10%, rgba(124, 58, 237, 0.22), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgba(34, 211, 238, 0.16), transparent 60%),
+    radial-gradient(700px 500px at 50% 120%, rgba(236, 72, 153, 0.12), transparent 60%);
+  background-attachment: fixed;
+}
+
+.hud-grid {
+  background-image:
+    linear-gradient(rgba(120, 140, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120, 140, 255, 0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(14px);
+  border-radius: 1.25rem;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02) inset, 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+.glow-ring {
+  box-shadow: 0 0 24px var(--ring-color, #22d3ee55), 0 0 60px var(--ring-color, #22d3ee33), inset 0 0 24px var(--ring-color, #22d3ee22);
+}
+
+.neon-text {
+  text-shadow: 0 0 12px currentColor;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition active:scale-95 disabled:opacity-50 disabled:active:scale-100;
+}
+.btn-primary {
+  background: linear-gradient(135deg, #7c3aed, #22d3ee);
+  color: white;
+  box-shadow: 0 8px 30px rgba(124, 58, 237, 0.35);
+}
+.btn-ghost {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+}
+.btn-ghost:hover { background: rgba(255, 255, 255, 0.07); }
+
+.input {
+  @apply w-full rounded-xl px-3 py-2 text-sm outline-none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+.input:focus { border-color: rgba(167, 139, 250, 0.6); box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.15); }
+
+.chip {
+  @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+}
+
+.label { @apply mb-1 block text-xs font-medium uppercase tracking-wider; color: var(--muted); }
+
+/* Animations */
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+@keyframes spin-rev { to { transform: rotate(-360deg); } }
+@keyframes pulse-glow { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+@keyframes wave { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+@keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.08); } }
+@keyframes talk { 0%, 100% { transform: scaleY(0.25); } 50% { transform: scaleY(1); } }
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes scan { 0% { top: -10%; } 100% { top: 110%; } }
+@keyframes sleepy-z { 0% { opacity: 0; transform: translate(0, 0) scale(0.6); } 50% { opacity: 1; } 100% { opacity: 0; transform: translate(14px, -28px) scale(1.1); } }
+
+.anim-bob { animation: bob 3.2s ease-in-out infinite; }
+.anim-spin-slow { animation: spin-slow 18s linear infinite; }
+.anim-spin-rev { animation: spin-rev 26s linear infinite; }
+.anim-pulse-glow { animation: pulse-glow 2.4s ease-in-out infinite; }
+.anim-blink { transform-origin: center; animation: blink 4.5s infinite; }
+.anim-talk { transform-origin: center; animation: talk 0.22s ease-in-out infinite; }
+.anim-fade-up { animation: fade-up 0.35s ease-out both; }
+.anim-z { animation: sleepy-z 2.2s ease-out infinite; }
+.wave-bar { transform-origin: bottom; animation: wave 0.9s ease-in-out infinite; }
+.scanline { position: absolute; left: 0; right: 0; height: 12%; background: linear-gradient(to bottom, transparent, rgba(34, 211, 238, 0.12), transparent); animation: scan 4s linear infinite; pointer-events: none; }
+
+.low-power .anim-bob, .low-power .anim-spin-slow, .low-power .anim-spin-rev, .low-power .scanline, .low-power .anim-pulse-glow { animation: none !important; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(140, 150, 255, 0.2); border-radius: 8px; }
+
+.prose-chat p { margin: 0.25rem 0; }
+.prose-chat pre { background: rgba(0,0,0,0.4); padding: 0.75rem; border-radius: 0.75rem; overflow-x: auto; font-size: 12px; }
+.prose-chat code { font-size: 12px; }

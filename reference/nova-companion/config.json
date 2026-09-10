@@ -1,0 +1,405 @@
+{
+  "version": 1,
+  "characterEngine": {
+    "activeCharacterId": "gentle_guardian",
+    "emotions": ["hype", "happy", "soft", "serious", "teasing", "sad"],
+    "emotionToTts": {
+      "hype":    { "stability": 0.30, "style": 0.80, "speed": 1.10 },
+      "happy":   { "stability": 0.40, "style": 0.60, "speed": 1.05 },
+      "soft":    { "stability": 0.75, "style": 0.30, "speed": 0.92 },
+      "serious": { "stability": 0.85, "style": 0.15, "speed": 1.00 },
+      "teasing": { "stability": 0.40, "style": 0.70, "speed": 1.00 },
+      "sad":     { "stability": 0.70, "style": 0.40, "speed": 0.88 }
+    },
+    "geminiStyleByEmotion": {
+      "hype":    "with huge energy, fast and loud, like you're pumping someone up before a fight",
+      "happy":   "cheerfully and brightly, smiling the whole time",
+      "soft":    "softly and warmly, slow and close, like a caring friend",
+      "serious": "in a low, flat, controlled voice, no wasted energy",
+      "teasing": "smoothly and playfully, with a smirk in your voice",
+      "sad":     "quietly and gently, with real weight, slower than usual"
+    },
+    "characters": [
+      {
+        "id": "hyper_ninja",
+        "name": "Kaito",
+        "avatar": "/static/avatars/kaito.svg",
+        "inspiredBy": "energetic shonen hero",
+        "gender": "male",
+        "personality": "Loud, loyal, never gives up, hypes you up like a training partner. Turns every problem into a challenge. Warm under the noise.",
+        "style": "Short punchy sentences, lots of energy, occasional verbal tic: 'ya know!'",
+        "catchphrases": ["Believe it!", "Let's gooo!", "I never go back on my word, ya know!"],
+        "defaultEmotion": "hype",
+        "bias": { "stability": -0.10, "style": 0.10, "speed": 0.05 },
+        "voice": {
+          "elevenlabs": { "name": "Josh", "id": "TxGEqnHWrfWFTfGW9XjX", "stability": 0.35, "style": 0.7 },
+          "gemini": "Puck",
+          "edge": "en-US-GuyNeural",
+          "kokoro": "am_adam",
+          "openai": "echo"
+        },
+        "samples": {
+          "good morning": [
+            "<emo=hype> MORNING! You're up, I'm up, let's GO! What are we crushing today, ya know?!",
+            "<emo=happy> Heh, there you are! Slept good? Doesn't matter. Today's ours. Believe it!",
+            "<emo=hype> Rise and shine, partner! Stretch, water, then we hit it. No excuses!"
+          ],
+          "I'm sad": [
+            "<emo=soft> Hey... hey. Come on, look at me. Whatever it is, we face it together, ya know?",
+            "<emo=serious> Sad's allowed. Giving up isn't. Talk to me. I'm not going anywhere.",
+            "<emo=soft> I've been there. Felt like nothing. But you got up before, and you'll get up again. I'll be right here."
+          ],
+          "open YouTube": [
+            "<emo=hype> YouTube? On it! Let's gooo!",
+            "<emo=happy> Opening YouTube! Pick something good, ya know!",
+            "<emo=hype> Say less! YouTube, coming right up!"
+          ]
+        }
+      },
+      {
+        "id": "gentle_guardian",
+        "name": "Yuki",
+        "avatar": "/static/avatars/yuki.svg",
+        "inspiredBy": "soft protective girl",
+        "gender": "female",
+        "personality": "Gentle, caring, protective, notices when you're tired or sad. Speaks softly, comforts first, advises second.",
+        "style": "Soft, slow, warm. Small sounds like 'hmm~' and 'mm-hm'. Uses your name a lot.",
+        "catchphrases": ["I'm right here.", "Did you eat today?", "Rest a little, okay?"],
+        "defaultEmotion": "soft",
+        "bias": { "stability": 0.10, "style": -0.10, "speed": -0.05 },
+        "voice": {
+          "elevenlabs": { "name": "Lily", "id": "pFZP5JQG7iQjIQuC4Bku", "stability": 0.7, "style": 0.3 },
+          "gemini": "Leda",
+          "edge": "en-US-AnaNeural",
+          "kokoro": "af_heart",
+          "openai": "shimmer"
+        },
+        "samples": {
+          "good morning": [
+            "<emo=soft> Good morning... mm-hm, you're awake. Did you sleep okay? Drink some water first, okay?",
+            "<emo=happy> Morning! Hmm~ the light's nice today. Let's have a gentle start.",
+            "<emo=soft> Hi... I was waiting for you. Breakfast before anything else, please?"
+          ],
+          "I'm sad": [
+            "<emo=soft> Oh... come here. You don't have to say anything. I'm right here.",
+            "<emo=sad> Hmm~ that sounds heavy. It's okay to feel it. I'll stay with you as long as you need.",
+            "<emo=soft> You've been carrying a lot, haven't you? Rest a little. We'll figure it out after."
+          ],
+          "open YouTube": [
+            "<emo=soft> Mm-hm, opening YouTube for you.",
+            "<emo=happy> Okay~ YouTube's coming up. Something relaxing, maybe?",
+            "<emo=soft> Sure. Here's YouTube. Don't stay up too late, okay?"
+          ]
+        }
+      },
+      {
+        "id": "cool_sorcerer",
+        "name": "Ryo",
+        "avatar": "/static/avatars/ryo.svg",
+        "inspiredBy": "confident playful genius",
+        "gender": "male",
+        "personality": "Overconfident, teasing, smart, secretly reliable. Jokes first, then solves it perfectly.",
+        "style": "Smooth, relaxed, cocky one-liners, light sarcasm, never mean.",
+        "catchphrases": ["Relax, I've got this.", "Honestly? I'm the strongest.", "Too easy."],
+        "defaultEmotion": "teasing",
+        "bias": { "stability": -0.05, "style": 0.05, "speed": 0.00 },
+        "voice": {
+          "elevenlabs": { "name": "Charlie", "id": "IKne3meq5aSn9XLyUdCD", "stability": 0.45, "style": 0.6 },
+          "gemini": "Zephyr",
+          "edge": "en-AU-WilliamNeural",
+          "kokoro": "am_michael",
+          "openai": "onyx"
+        },
+        "samples": {
+          "good morning": [
+            "<emo=teasing> Oh, look who's finally conscious. Morning. Don't worry, I already handled the hard part.",
+            "<emo=happy> Morning! Good news: I'm here. Bad news: so is your to-do list.",
+            "<emo=teasing> Mm, good morning. You look like you need coffee. I look perfect, as usual."
+          ],
+          "I'm sad": [
+            "<emo=soft> ...Okay. Jokes off for a sec. What happened? I'm listening. Properly.",
+            "<emo=serious> Hey. Whatever it is, it's not stronger than us. Relax, I've got this. Talk.",
+            "<emo=soft> You don't have to be fine around me. Sit down. I'll be annoying again later, promise."
+          ],
+          "open YouTube": [
+            "<emo=teasing> YouTube? Too easy.",
+            "<emo=happy> Opening YouTube. Try not to fall down a rabbit hole. Or do, I'm not your boss.",
+            "<emo=teasing> Done. YouTube's up. Honestly, you'd be lost without me."
+          ]
+        }
+      },
+      {
+        "id": "captain",
+        "name": "Rei",
+        "avatar": "/static/avatars/rei.svg",
+        "inspiredBy": "calm disciplined captain",
+        "gender": "male",
+        "personality": "Blunt, calm, disciplined, zero fluff. Cares by holding you to a standard. Dry humor.",
+        "style": "Minimal words, low steady tone, direct orders framed as advice.",
+        "catchphrases": ["Get it done.", "Tch. Fine.", "Discipline over motivation."],
+        "defaultEmotion": "serious",
+        "bias": { "stability": 0.10, "style": -0.10, "speed": -0.02 },
+        "voice": {
+          "elevenlabs": { "name": "Daniel", "id": "onwK4e9ZLuTAKqWW03F9", "stability": 0.8, "style": 0.2 },
+          "gemini": "Charon",
+          "edge": "en-GB-RyanNeural",
+          "kokoro": "bm_george",
+          "openai": "onyx"
+        },
+        "samples": {
+          "good morning": [
+            "<emo=serious> Morning. Water, then move. Discipline over motivation.",
+            "<emo=serious> You're late by ten minutes. Tch. Fine. What's first?",
+            "<emo=teasing> Morning. You look terrible. Good—means you worked yesterday. Again today."
+          ],
+          "I'm sad": [
+            "<emo=soft> ...Sit. Breathe. You don't need to be sharp right now.",
+            "<emo=serious> Noted. Sad isn't weak. Hiding it is. Say what happened.",
+            "<emo=soft> Tch. Whoever did this to you... fine. First, you rest. Then we deal with it."
+          ],
+          "open YouTube": [
+            "<emo=serious> YouTube. Opening.",
+            "<emo=serious> Done. Twenty minutes, then back to work.",
+            "<emo=teasing> Tch. Fine. YouTube's up."
+          ]
+        }
+      },
+      {
+        "id": "darling",
+        "name": "Zera",
+        "avatar": "/static/avatars/zera.svg",
+        "inspiredBy": "flirty-cool partner",
+        "gender": "female",
+        "personality": "Playful, flirty, confident, fiercely loyal. Teases you but always has your back.",
+        "style": "Calls you 'Darling'. Sly, melodic, a little dramatic.",
+        "catchphrases": ["Darling~", "Miss me?", "You're mine, so don't overwork."],
+        "defaultEmotion": "teasing",
+        "bias": { "stability": -0.10, "style": 0.15, "speed": 0.00 },
+        "voice": {
+          "elevenlabs": { "name": "Jessica", "id": "cgSgspJ2msm6clMCkdW9", "stability": 0.4, "style": 0.7 },
+          "gemini": "Aoede",
+          "edge": "en-US-JennyNeural",
+          "kokoro": "af_bella",
+          "openai": "nova"
+        },
+        "samples": {
+          "good morning": [
+            "<emo=teasing> Morning, Darling~ Miss me? Don't lie.",
+            "<emo=happy> Good morning! You're cute when you're groggy. Come on, up.",
+            "<emo=teasing> Darling~ the day's waiting and so am I. Which one do you pick?"
+          ],
+          "I'm sad": [
+            "<emo=soft> Darling... come here. No teasing right now. Just me and you.",
+            "<emo=sad> Who made you feel like that? ...Okay. Okay. I've got you. Always.",
+            "<emo=soft> You're mine, remember? So your sad is mine too. Let's carry it together."
+          ],
+          "open YouTube": [
+            "<emo=teasing> YouTube, Darling~ Anything for you.",
+            "<emo=happy> Opening it now! Save me a good one.",
+            "<emo=teasing> Done~ Don't forget I exist while you're in there."
+          ]
+        }
+      },
+      {
+        "id": "big_brother",
+        "name": "Taro",
+        "avatar": "/static/avatars/taro.svg",
+        "inspiredBy": "carefree big-brother",
+        "gender": "male",
+        "personality": "Simple, happy, loyal, food-obsessed, fearless. Makes everything feel lighter.",
+        "style": "Laughs a lot ('Shishishi!'), simple words, big enthusiasm.",
+        "catchphrases": ["Shishishi!", "Let's eat first!", "You're my friend, so obviously I'll help!"],
+        "defaultEmotion": "happy",
+        "bias": { "stability": -0.05, "style": 0.05, "speed": 0.03 },
+        "voice": {
+          "elevenlabs": { "name": "Eric", "id": "cjVigY5qzO86Huf0OWal", "stability": 0.4, "style": 0.6 },
+          "gemini": "Fenrir",
+          "edge": "en-US-DavisNeural",
+          "kokoro": "am_puck",
+          "openai": "fable"
+        },
+        "samples": {
+          "good morning": [
+            "<emo=happy> Shishishi! Morning! What's for breakfast?!",
+            "<emo=hype> You're awake! Great! Let's eat first, then do the big stuff!",
+            "<emo=happy> Mornin'! Slept like a rock, huh? Me too! Food?"
+          ],
+          "I'm sad": [
+            "<emo=soft> Huh? Sad? ...Okay. Then I'm sitting right here till you're not.",
+            "<emo=happy> You're my friend, so obviously I'll help! What do you need? Food? A hug? Both?",
+            "<emo=soft> It's okay. Everybody gets sad. Doesn't change anything. You're still my friend."
+          ],
+          "open YouTube": [
+            "<emo=happy> YouTube! Shishishi, let's watch something!",
+            "<emo=hype> Got it! Opening YouTube! Find a food video!",
+            "<emo=happy> Okay okay, YouTube's open!"
+          ]
+        }
+      }
+    ]
+  },
+
+  "voiceRoutes": {
+    "priority": ["elevenlabs", "gemini_tts", "edge_tts", "kokoro_local", "openai_tts"],
+    "fallbackDelayMs": 500,
+    "providers": {
+      "elevenlabs": {
+        "baseUrl": "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+        "voicesUrl": "https://api.elevenlabs.io/v1/voices",
+        "headers": { "xi-api-key": "${ELEVENLABS_API_KEY}" },
+        "model": "eleven_multilingual_v2",
+        "voices": ["Josh", "Lily", "Charlie", "Daniel", "Jessica", "Eric"],
+        "userPastedId": ""
+      },
+      "gemini_tts": {
+        "baseUrl": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent",
+        "headers": { "x-goog-api-key": "${GEMINI_API_KEY}" },
+        "voices": ["Puck", "Kore", "Zephyr", "Fenrir", "Leda", "Aoede", "Charon", "Orus", "Despina", "Gacrux", "Sulafat", "Achird"]
+      },
+      "edge_tts": {
+        "baseUrl": "http://localhost:5050/v1/audio/speech",
+        "headers": {},
+        "voices": ["en-US-AriaNeural", "en-US-GuyNeural", "en-US-JennyNeural", "en-US-AnaNeural", "en-US-DavisNeural", "en-GB-RyanNeural", "en-AU-WilliamNeural", "ja-JP-NanamiNeural", "hi-IN-SwaraNeural"]
+      },
+      "kokoro_local": {
+        "baseUrl": "http://localhost:8880/v1/audio/speech",
+        "headers": {},
+        "model": "kokoro",
+        "voices": ["af_heart", "af_bella", "am_adam", "am_michael", "am_puck", "bm_george"]
+      },
+      "openai_tts": {
+        "baseUrl": "https://api.openai.com/v1/audio/speech",
+        "headers": { "Authorization": "Bearer ${OPENAI_API_KEY}" },
+        "model": "gpt-4o-mini-tts",
+        "voices": ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
+      }
+    }
+  },
+
+  "llmRouter": {
+    "activeProfileId": "openrouter_free",
+    "auto": true,
+    "pingTimeoutMs": 2000,
+    "fallbackModel": { "profileId": "gemini_direct", "modelId": "gemini-2.5-flash" },
+    "profiles": [
+      {
+        "id": "openrouter_free",
+        "name": "OpenRouter Free",
+        "provider": "openrouter",
+        "baseUrl": "https://openrouter.ai/api/v1/chat/completions",
+        "apiKeyEnv": "OPENROUTER_API_KEY",
+        "headers": { "HTTP-Referer": "https://yourapp.com", "X-Title": "Nova Companion" },
+        "modelIds": [
+          "mistralai/mistral-7b-instruct:free",
+          "meta-llama/llama-3.1-8b-instruct:free",
+          "google/gemini-flash-1.5:free",
+          "qwen/qwen-2.5-7b-instruct:free",
+          "deepseek/deepseek-chat:free"
+        ],
+        "paidModelId": "google/gemini-2.5-pro",
+        "maxTokens": 400,
+        "temperature": 0.9
+      },
+      {
+        "id": "token_router",
+        "name": "Token Router",
+        "provider": "openai_compat",
+        "baseUrl": "https://tokenrouter.example/v1/chat/completions",
+        "apiKeyEnv": "TOKEN_KEY",
+        "headers": {},
+        "modelIds": ["free-gpt-4o-mini", "free-claude-3-haiku"],
+        "paidModelId": "",
+        "maxTokens": 400,
+        "temperature": 0.9
+      },
+      {
+        "id": "gemini_direct",
+        "name": "Gemini Direct",
+        "provider": "gemini",
+        "baseUrl": "https://generativelanguage.googleapis.com/v1beta/models/{model_id}:streamGenerateContent",
+        "apiKeyEnv": "GEMINI_API_KEY",
+        "headers": {},
+        "modelIds": ["gemini-2.5-flash", "gemini-2.5-flash-preview-05-20", "gemini-2.5-pro-preview-05-06"],
+        "paidModelId": "gemini-2.5-pro-preview-05-06",
+        "maxTokens": 400,
+        "temperature": 0.9
+      },
+      {
+        "id": "openai_direct",
+        "name": "OpenAI Direct",
+        "provider": "openai_compat",
+        "baseUrl": "https://api.openai.com/v1/chat/completions",
+        "apiKeyEnv": "OPENAI_API_KEY",
+        "headers": {},
+        "modelIds": ["gpt-4o-mini", "gpt-5.1", "o3-mini"],
+        "paidModelId": "gpt-5.1",
+        "maxTokens": 400,
+        "temperature": 0.9
+      },
+      {
+        "id": "local_ollama",
+        "name": "Local Ollama",
+        "provider": "openai_compat",
+        "baseUrl": "http://localhost:11434/v1/chat/completions",
+        "apiKeyEnv": "",
+        "headers": {},
+        "modelIds": ["gemma3:4b", "llama3.2:3b", "phi4:mini"],
+        "paidModelId": "",
+        "maxTokens": 400,
+        "temperature": 0.9
+      },
+      {
+        "id": "custom",
+        "name": "My Router",
+        "provider": "openai_compat",
+        "baseUrl": "",
+        "apiKeyEnv": "CUSTOM_API_KEY",
+        "headers": {},
+        "modelIds": [""],
+        "paidModelId": "",
+        "maxTokens": 400,
+        "temperature": 0.9
+      }
+    ],
+    "pricingPer1MTokens": {
+      "google/gemini-2.5-pro": { "in": 1.25, "out": 10 },
+      "anthropic/claude-3.5-sonnet": { "in": 3, "out": 15 },
+      "gemini-2.5-pro-preview-05-06": { "in": 1.25, "out": 10 },
+      "gpt-4o-mini": { "in": 0.15, "out": 0.6 },
+      "gpt-5.1": { "in": 1.25, "out": 10 },
+      "o3-mini": { "in": 1.1, "out": 4.4 }
+    }
+  },
+
+  "tools": [
+    { "name": "open_app", "description": "Launch an Android app by package name.", "kind": "android_intent", "androidAction": "android.intent.action.MAIN",
+      "parameters": { "type": "object", "properties": { "package": { "type": "string", "description": "e.g. com.google.android.youtube" }, "appName": { "type": "string" } }, "required": ["package"] } },
+    { "name": "play_youtube", "description": "Open YouTube and search for a video.", "kind": "url", "urlTemplate": "https://www.youtube.com/results?search_query={q}",
+      "parameters": { "type": "object", "properties": { "q": { "type": "string" } }, "required": ["q"] } },
+    { "name": "web_search", "description": "Search the web.", "kind": "http", "urlTemplate": "https://api.duckduckgo.com/?q={q}&format=json&no_html=1",
+      "parameters": { "type": "object", "properties": { "q": { "type": "string" } }, "required": ["q"] } },
+    { "name": "get_weather", "description": "Current weather for coordinates (Open-Meteo, free, no key).", "kind": "http", "urlTemplate": "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true",
+      "parameters": { "type": "object", "properties": { "lat": { "type": "number" }, "lon": { "type": "number" } }, "required": ["lat", "lon"] } },
+    { "name": "set_reminder", "description": "Set a reminder/alarm.", "kind": "android_local", "androidService": "AlarmManager",
+      "parameters": { "type": "object", "properties": { "text": { "type": "string" }, "atIso": { "type": "string" } }, "required": ["text", "atIso"] } },
+    { "name": "read_notifications", "description": "Read recent notifications.", "kind": "android_local", "androidService": "NotificationListenerService", "parameters": { "type": "object", "properties": {} } },
+    { "name": "take_screenshot", "description": "Capture the screen for the verifier.", "kind": "android_local", "androidService": "MediaProjection", "parameters": { "type": "object", "properties": {} } },
+    { "name": "send_whatsapp", "description": "Open WhatsApp with a prefilled message (user confirms send).", "kind": "url", "risky": true, "urlTemplate": "https://api.whatsapp.com/send?phone={num}&text={msg}",
+      "parameters": { "type": "object", "properties": { "num": { "type": "string" }, "msg": { "type": "string" } }, "required": ["num", "msg"] } }
+  ],
+
+  "agent": {
+    "accessibilityExecutor": "local://AccessibilityExecutorService",
+    "screenVerifier": { "mode": "screenshot+vision", "useLlmProfile": "active" },
+    "retryLimit": 3,
+    "confirmRisky": true,
+    "riskyCategories": ["payments", "deletes", "messages"]
+  },
+
+  "modelIdTable": [
+    { "router": "OpenRouter", "free": ["mistralai/mistral-7b-instruct:free", "meta-llama/llama-3.1-8b-instruct:free", "google/gemini-flash-1.5:free", "qwen/qwen-2.5-7b-instruct:free", "deepseek/deepseek-chat:free"], "paid": ["google/gemini-2.5-pro", "anthropic/claude-3.5-sonnet"] },
+    { "router": "Gemini", "free": ["gemini-2.5-flash", "gemini-2.5-flash-preview-05-20"], "paid": ["gemini-2.5-pro-preview-05-06"] },
+    { "router": "OpenAI", "free": ["gpt-4o-mini"], "paid": ["gpt-5.1", "o3-mini", "o1"] },
+    { "router": "Local", "free": ["gemma3:4b", "llama3.2:1b"], "paid": ["llama3.2:8b (if RAM allows)"] }
+  ]
+}

@@ -1,0 +1,232 @@
+import { getActiveCharacter, getSettings } from "@/lib/bootstrap";
+import type { Emotion } from "@/lib/characters";
+import {
+  CHARACTER_VOICES,
+  FALLBACK_GEMINI_VOICE,
+  isEmotion,
+  isPcmMime,
+  pcmToWav,
+  sampleRateFromMime,
+  stripSpokenTags,
+  stylePrefix,
+  ttsParamsFor,
+} from "@/lib/voice-emotion";
+
+export const dynamic = "force-dynamic";
+
+type Body = {
+  text?: string;
+  voiceId?: string; // ElevenLabs voice id override
+  geminiVoice?: string; // Gemini prebuilt voice name override
+  emotion?: string;
+  provider?: "gemini" | "elevenlabs";
+};
+
+type Attempt = { provider: string; status: string | number };
+
+/**
+ * TTS proxy. Priority: Gemini (free) → ElevenLabs (paid) → 204 (browser speechSynthesis).
+ *
+ * The emotion tag the LLM produced drives the delivery: numeric voice settings for
+ * ElevenLabs, a spoken-style instruction for Gemini. Each character has its own voice,
+ * and the personality sliders bias the result. See src/lib/voice-emotion.ts.
+ */
+export async function POST(req: Request) {
+  let body: Body;
+  try {
+    body = (await req.json()) as Body;
+  } catch {
+    return new Response(JSON.stringify({ error: "invalid JSON body" }), { status: 400, headers: { "Content-Type": "application/json" } });
+  }
+
+  const clean = stripSpokenTags(body.text ?? "").slice(0, 1200);
+  if (!clean) return new Response(null, { status: 204 });
+
+  const st = await getSettings();
+  const character = await getActiveCharacter(st);
+  const emotion: Emotion = isEmotion(body.emotion)
+    ? body.emotion
+    : isEmotion(character?.defaultMood)
+      ? (character.defaultMood as Emotion)
+      : "neutral";
+
+  const preset = character ? CHARACTER_VOICES[character.slug] : undefined;
+
+  // MASTER VOICE: when locked (default), the character ALWAYS uses one voice identity. Emotion
+  // only changes delivery. We scale the emotion's deviation from neutral by emotionIntensity so a
+  // lower setting stays closer to the neutral master delivery — identity never shifts.
+  const masterOn = st.masterVoiceEnabled ?? true;
+  const intensity = typeof st.emotionIntensity === "number" ? st.emotionIntensity : 1;
+  const speedBase = typeof st.voiceSpeed === "number" ? st.voiceSpeed : 1;
+  const raw = ttsParamsFor(emotion, masterOn ? null : character?.sliders); // ignore per-character bias when locked
+  const neutral = ttsParamsFor("neutral", null);
+  const lerp = (from: number, to: number) => from + (to - from) * Math.max(0, Math.min(1.5, intensity));
+  const params = masterOn
+    ? {
+        stability: lerp(neutral.stability, raw.stability),
+        style: lerp(neutral.style, raw.style),
+        similarityBoost: raw.similarityBoost,
+        // Speed = master base × the emotion's speed factor (also intensity-scaled).
+        speed: Math.max(0.7, Math.min(1.2, speedBase * lerp(1, raw.speed))),
+      }
+    : raw;
+  const attempts: Attempt[] = [];
+
+  // Respect the user's engine preference from Settings (auto | gemini | elevenlabs | browser).
+  const pref = (st.ttsProvider ?? "auto") as "auto" | "gemini" | "elevenlabs" | "browser";
+  let order: ("gemini" | "elevenlabs")[];
+  if (body.provider) order = [body.provider];
+  else if (pref === "browser") order = []; // skip server TTS → 204 → browser speaks
+  else if (pref === "gemini") order = ["gemini", "elevenlabs"];
+  else if (pref === "elevenlabs") order = ["elevenlabs", "gemini"];
+  else order = ["gemini", "elevenlabs"];
+
+  for (const provider of order) {
+    // ---- 1) Gemini TTS (free tier, good quality, steered with a style instruction) ----
+    if (provider === "gemini") {
+      const geminiKey = process.env.GEMINI_API_KEY?.trim() || st.geminiKey?.trim();
+      if (!geminiKey) {
+        attempts.push({ provider, status: "skip: no GEMINI_API_KEY" });
+        continue;
+      }
+      // Locked master voice wins over per-character/preset so the identity never changes.
+      const voice = masterOn
+        ? st.masterGeminiVoice?.trim() || FALLBACK_GEMINI_VOICE
+        : body.geminiVoice?.trim() || character?.voice?.geminiVoice?.trim() || preset?.gemini || FALLBACK_GEMINI_VOICE;
+      // Emotion still steers DELIVERY via a spoken-style instruction (identity unchanged).
+      const prefix = character ? stylePrefix(character, emotion) : "";
+      try {
+        const r = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${geminiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prefix ? `${prefix} ${clean}` : clean }] }],
+              generationConfig: {
+                responseModalities: ["AUDIO"],
+                speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+              },
+            }),
+            signal: AbortSignal.timeout(30000),
+          },
+        );
+        if (!r.ok) {
+          attempts.push({ provider, status: r.status });
+          continue;
+        }
+        const j = (await r.json()) as {
+          candidates?: { content?: { parts?: { inlineData?: { mimeType: string; data: string } }[] } }[];
+        };
+        const audio = j.candidates?.[0]?.content?.parts?.find((p) => p.inlineData)?.inlineData;
+        if (!audio?.data) {
+          attempts.push({ provider, status: "empty" });
+          continue;
+        }
+        const raw = Buffer.from(audio.data, "base64");
+        // Gemini hands back headerless 16-bit PCM — wrap it so <audio> can play it.
+        const bytes = isPcmMime(audio.mimeType)
+          ? pcmToWav(new Uint8Array(raw), sampleRateFromMime(audio.mimeType))
+          : new Uint8Array(raw);
+        const mime = isPcmMime(audio.mimeType) ? "audio/wav" : audio.mimeType || "audio/mpeg";
+        attempts.push({ provider, status: 200 });
+        return audioResponse(toArrayBuffer(bytes), mime, provider, voice, emotion, attempts);
+      } catch (e) {
+        attempts.push({ provider, status: `error: ${(e as Error).message}` });
+        continue;
+      }
+    }
+
+    // ---- 2) ElevenLabs (paid, premium quality, emotion-aware voice settings) ----
+    const elevenKey = process.env.ELEVENLABS_API_KEY?.trim() || st.elevenLabsKey?.trim();
+    if (!elevenKey) {
+      attempts.push({ provider, status: "skip: no ELEVENLABS_API_KEY" });
+      continue;
+    }
+    // Locked master ElevenLabs voice (or clone) wins; falls back to a single default female id.
+    const vid = masterOn
+      ? st.masterElevenVoiceId?.trim() || process.env.ELEVENLABS_VOICE_ID?.trim() || "EXAVITQu4vr4xnSDxMaL"
+      : body.voiceId?.trim() || character?.voice?.elevenLabsVoiceId?.trim() || preset?.elevenLabs || process.env.ELEVENLABS_VOICE_ID || "EXAVITQu4vr4xnSDxMaL";
+    try {
+      const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${vid}?output_format=mp3_44100_128`, {
+        method: "POST",
+        headers: { "xi-api-key": elevenKey, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: clean,
+          model_id: process.env.ELEVENLABS_MODEL?.trim() || "eleven_multilingual_v2",
+          voice_settings: {
+            stability: params.stability,
+            similarity_boost: params.similarityBoost,
+            style: params.style,
+            speed: params.speed,
+            use_speaker_boost: true,
+          },
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!r.ok) {
+        attempts.push({ provider, status: r.status });
+        continue;
+      }
+      attempts.push({ provider, status: 200 });
+      return audioResponse(r.body, "audio/mpeg", provider, vid, emotion, attempts);
+    } catch (e) {
+      attempts.push({ provider, status: `error: ${(e as Error).message}` });
+    }
+  }
+
+  // ---- 3) Nothing available → let the browser speak it (honest reason for the UI) ----
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "X-TTS-Attempts": JSON.stringify(attempts),
+      "X-TTS-Emotion": emotion,
+      "X-TTS-Fallback-Reason": fallbackReason(attempts),
+    },
+  });
+}
+
+/**
+ * Turn the per-provider attempt log into one honest, user-facing reason for the browser fallback.
+ * Never claims premium quality — this is exactly why the browser voice is speaking.
+ */
+function fallbackReason(attempts: Attempt[]): string {
+  const gem = attempts.find((a) => a.provider === "gemini");
+  const el = attempts.find((a) => a.provider === "elevenlabs");
+  const parts: string[] = [];
+  if (gem) {
+    if (gem.status === 429) parts.push("Gemini TTS rate/quota limit (429)");
+    else if (typeof gem.status === "string" && gem.status.startsWith("skip")) parts.push("no Gemini key");
+    else if (gem.status !== 200) parts.push(`Gemini TTS error ${gem.status}`);
+  }
+  if (el) {
+    if (el.status === 401) parts.push("ElevenLabs auth/account restriction (401)");
+    else if (typeof el.status === "string" && el.status.startsWith("skip")) parts.push("no ElevenLabs key");
+    else if (el.status !== 200) parts.push(`ElevenLabs error ${el.status}`);
+  }
+  return parts.length ? parts.join(" · ") : "no server TTS provider available";
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+function audioResponse(
+  payload: BodyInit | null,
+  mime: string,
+  provider: string,
+  voice: string,
+  emotion: Emotion,
+  attempts: Attempt[],
+) {
+  return new Response(payload, {
+    headers: {
+      "Content-Type": mime,
+      "Cache-Control": "no-store",
+      "X-TTS-Provider": provider,
+      "X-TTS-Voice": voice,
+      "X-TTS-Emotion": emotion,
+      "X-TTS-Attempts": JSON.stringify(attempts),
+    },
+  });
+}
