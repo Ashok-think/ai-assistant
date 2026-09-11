@@ -14,7 +14,7 @@ import { usageLogs, settings as settingsTable } from "@/db/schema";
 import { gte, sql } from "drizzle-orm";
 
 export type Tier = "fast" | "smart" | "local" | "offline";
-export type ProviderId = "openai" | "groq" | "openrouter" | "gemini" | "ollama" | "offline" | "tokenrouter" | "qwen" | "aihub" | "custom";
+export type ProviderId = "gateway" | "openai" | "groq" | "openrouter" | "gemini" | "ollama" | "offline" | "tokenrouter" | "qwen" | "aihub" | "custom";
 
 export type ModelSpec = {
   provider: ProviderId;
@@ -147,6 +147,10 @@ export function buildCatalog(s: Settings): { spec: ModelSpec; key: string | null
       spec: { provider: "gemini" as ProviderId, model: env("GEMINI_SMART_MODEL", s.geminiSmartModel) ?? "gemini-2.5-pro", baseUrl: gbase, inPer1M: 1.25, outPer1M: 10, free: false, supportsTools: true },
     });
   }
+  list.push(
+    { tier: "fast", key: null, spec: { provider: "gateway", model: "google/gemini-3.5-flash-lite", baseUrl: "", inPer1M: 0.3, outPer1M: 2.5, free: false, supportsTools: true } },
+    { tier: "smart", key: null, spec: { provider: "gateway", model: "google/gemini-3.8-flash", baseUrl: "", inPer1M: 0.75, outPer1M: 3.75, free: false, supportsTools: true } },
+  );
   return list;
 }
 
@@ -206,7 +210,7 @@ export async function routeChain(opts: {
     reasons.push(`forced ${mode}`);
   }
 
-  let pool = catalog;
+  let pool = wanted === "offline" ? [] : wanted === "local" ? catalog.filter((entry) => entry.tier === "local") : catalog;
   if (s.freeOnlyMode) {
     pool = pool.filter((c) => c.spec.free);
     reasons.push("free-only mode");
