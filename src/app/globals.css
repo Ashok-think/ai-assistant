@@ -27,6 +27,7 @@
   --color-border: var(--border);
   --font-sans: var(--font-geist), sans-serif;
   --font-mono: var(--font-geist-mono), monospace;
+  --spacing: 0.25rem;
 }
 
 html, body {
