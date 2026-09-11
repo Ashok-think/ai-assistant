@@ -1,5 +1,6 @@
 import { db } from "@/db";
-import { memories, reminders, todos, notes, moods } from "@/db/schema";
+import { memories, reminders, todos, notes, moods, skills } from "@/db/schema";
+import { toolPolicyBlock, validateToolArguments, type ToolStatus } from "./tool-policy";
 import { desc, eq } from "drizzle-orm";
 import { composeUrl, isAllowedUrl, normalizeUrl, SITE_SHORTCUTS, type ClientAction, type MessageApp } from "./actions";
 import { BROWSER_TOOLS } from "./browser-tools";
@@ -9,7 +10,7 @@ import { ANDROID_TOOLS } from "./android-tools";
  * What a tool hands back. `text` is what the model and the user read; `action` is work only the
  * browser can do (open a tab, read the screen) and is forwarded to the client as an SSE event.
  */
-export type ToolRun = { text: string; action?: ClientAction };
+export type ToolRun = { text: string; action?: ClientAction; status?: ToolStatus };
 
 export type ToolDef = {
   name: string;
@@ -39,7 +40,7 @@ function openTarget(raw: string, label = ""): ToolRun | string {
   return action(
     { kind: "open_url", url, label: label || host },
     isAllowedUrl(url)
-      ? `Opening ${host} in the user's browser now.`
+      ? `Requested opening ${host}; waiting for the user's browser to confirm.`
       : `Offered to open ${host}. It's not on the trusted list, so the user has to confirm it first.`,
   );
 }
@@ -273,7 +274,7 @@ export const TOOLS: ToolDef[] = [
     skillKey: "system",
     description: "Get the current date and time.",
     parameters: { type: "object", properties: {} },
-    run: async () => `Current date/time: ${new Date().toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" })}`,
+    run: async () => ({ status: "succeeded", text: `Server date/time: ${new Date().toISOString()}. This is not a reading of the user's device clock.` }),
   },
   {
     name: "calculate",
@@ -393,7 +394,7 @@ export const TOOLS: ToolDef[] = [
       const url = composeUrl(app, to, text);
       return action(
         { kind: "compose_message", app, to, text, url, label: `${app}${to ? ` → ${to}` : ""}` },
-        `Opened ${app} with the message "${text}" ready to send${to ? ` to ${to}` : ""}. The user presses send.`,
+        `Prepared a draft for ${app}${to ? ` to ${to}` : ""}. Opening the app is not yet confirmed. The message has not been sent; the user must review and press send.`,
       );
     },
   },
@@ -417,7 +418,7 @@ export const TOOLS: ToolDef[] = [
     run: async (a) => {
       const text = str(a.text);
       if (!text) return "Nothing to copy.";
-      return action({ kind: "clipboard", text, label: `Copy ${text.length} chars` }, `Copied to the user's clipboard: ${text.slice(0, 80)}`);
+      return action({ kind: "clipboard", text, label: `Copy ${text.length} chars` }, `Requested copying ${text.length} characters. Clipboard access is not yet confirmed.`);
     },
   },
   {
@@ -473,14 +474,22 @@ export function toolsForLLM(enabledSkillKeys: Set<string>) {
  * Run a tool and always hand back a `ToolRun`, so callers never have to care whether a tool
  * returned a plain sentence or a sentence plus a browser action.
  */
-export async function runTool(name: string, args: Record<string, unknown>): Promise<ToolRun> {
+export async function runTool(name: string, args: unknown): Promise<ToolRun & { status: ToolStatus }> {
   const t = TOOLS.find((x) => x.name === name);
-  if (!t) return { text: `Unknown tool ${name}` };
+  if (!t) return { status: "blocked", text: `Unknown tool ${name}. No action was performed.` };
+  const invalid = validateToolArguments(t.parameters, args);
+  if (invalid) return { status: "blocked", text: invalid };
   try {
-    const r = await t.run(args);
-    return typeof r === "string" ? { text: r } : r;
-  } catch (e) {
-    return { text: `Tool ${name} failed: ${e instanceof Error ? e.message : String(e)}` };
+    const enabled = await db.select({ key: skills.key }).from(skills).where(eq(skills.enabled, true)).all();
+    const blocked = toolPolicyBlock(t, new Set(enabled.map((skill) => skill.key)));
+    if (blocked) return { status: "blocked", text: blocked };
+    const result = await t.run(args as Record<string, unknown>);
+    const output = typeof result === "string" ? { text: result } : result;
+    if (output.action) return { ...output, status: "awaiting_user", text: `Client action requested, not verified: ${output.text}` };
+    // Legacy text is not execution evidence. Only structured tool results can report success.
+    return { ...output, status: output.status ?? "unverified" };
+  } catch {
+    return { status: "failed", text: `Tool ${name} failed. The outcome is not confirmed; do not retry a state-changing action without checking it first.` };
   }
 }
 
