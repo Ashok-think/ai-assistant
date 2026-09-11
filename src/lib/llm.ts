@@ -1,4 +1,5 @@
 import type { ModelSpec } from "./router";
+import { gatewayCompletion } from "./gateway";
 
 export type ChatMessage =
   | { role: "system" | "user"; content: string }
@@ -123,6 +124,10 @@ export async function* chatCompletionStream(opts: {
    */
   firstTokenTimeoutMs?: number;
 }): AsyncGenerator<{ type: "delta"; text: string } | { type: "done"; result: LLMResult }> {
+  if (opts.spec.provider === "gateway") {
+    yield* gatewayCompletion(opts);
+    return;
+  }
   const { url, headers, body } = buildRequest({ ...opts, stream: true });
   const ctl = new AbortController();
   let ttft: ReturnType<typeof setTimeout> | null = null;
@@ -230,6 +235,12 @@ export async function chatCompletion(opts: {
   maxTokens?: number;
   timeoutMs?: number;
 }): Promise<LLMResult> {
+  if (opts.spec.provider === "gateway") {
+    for await (const event of gatewayCompletion(opts)) {
+      if (event.type === "done") return event.result;
+    }
+    throw new Error("Gateway returned no completion");
+  }
   const { url, headers, body } = buildRequest(opts);
   const res = await fetch(url, {
     method: "POST",

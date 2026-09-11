@@ -122,6 +122,9 @@ export function matchesWake(heardRaw: string, wakeRaw: string): { hit: boolean; 
   return { hit: false, rest: "" };
 }
 
+let speechGeneration = 0;
+let speechRequest: AbortController | null = null;
+let finishPlayback: (() => void) | null = null;
 let currentAudio: HTMLAudioElement | null = null;
 let currentUtterance: SpeechSynthesisUtterance | null = null;
 let mouthRaf = 0;
@@ -141,6 +144,11 @@ function stopMouth(onMouth?: (f: MouthFrame) => void) {
 }
 
 export function stopSpeaking() {
+  speechGeneration++;
+  speechRequest?.abort();
+  speechRequest = null;
+  finishPlayback?.();
+  finishPlayback = null;
   if (currentAudio) {
     currentAudio.pause();
     currentAudio.src = "";
@@ -192,27 +200,11 @@ function attachLipSync(audio: HTMLAudioElement, onMouth: (f: MouthFrame) => void
     };
     loop();
   } catch {
-    // MediaElementSource can fail (e.g. CORS on the blob is fine, but be defensive). Fall back
-    // to a synthetic flap so the mouth still moves roughly in time with playback.
-    syntheticMouth(audio, onMouth);
+    // Without audio samples there is no truthful amplitude-driven lip sync.
+    stopMouth(onMouth);
   }
 }
 
-/** No analyser available (browser speechSynthesis, or a failed source) → fake a talking flap. */
-function syntheticMouth(el: HTMLAudioElement | { paused: boolean } | null, onMouth: (f: MouthFrame) => void) {
-  let t = 0;
-  const loop = () => {
-    const playing = el ? !("paused" in el) || !el.paused : true;
-    if (!playing) return stopMouth(onMouth);
-    t += 0.35;
-    // Two overlapping sines → an irregular, natural-looking flap.
-    const level = Math.max(0, 0.55 + 0.35 * Math.sin(t) + 0.15 * Math.sin(t * 2.3));
-    const viseme: Viseme = level < 0.12 ? "closed" : level > 0.7 ? "wide" : "mid";
-    onMouth({ level: Math.min(1, level), viseme });
-    mouthRaf = requestAnimationFrame(loop);
-  };
-  loop();
-}
 
 function emotionAdjust(emotion: string, v: VoiceSettings) {
   let pitch = v.pitch;
@@ -261,6 +253,10 @@ function pickVoice(lang: string, warmth: number): SpeechSynthesisVoice | null {
 
 export async function speak(text: string, opts: { voice: VoiceSettings; emotion: string; lang?: string; onStart?: () => void; onEnd?: () => void; onMouth?: (f: MouthFrame) => void; onProvider?: (p: string) => void; onFallbackReason?: (reason: string) => void }): Promise<void> {
   stopSpeaking();
+  const generation = speechGeneration;
+  const controller = new AbortController();
+  speechRequest = controller;
+  const canceled = () => generation !== speechGeneration || controller.signal.aborted;
   // Natural spoken text only — never tags, JSON, tool traces, markdown symbols or code fences.
   const clean = toSpeechText(text);
   if (!clean) return;
@@ -271,7 +267,9 @@ export async function speak(text: string, opts: { voice: VoiceSettings; emotion:
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: clean, voiceId: opts.voice.elevenLabsVoiceId, geminiVoice: opts.voice.geminiVoice, emotion: opts.emotion }),
+      signal: controller.signal,
     });
+    if (canceled()) return;
     if (r.status === 204) {
       // Server had no usable premium voice — tell the caller exactly why before the browser speaks.
       opts.onFallbackReason?.(r.headers.get("X-TTS-Fallback-Reason") ?? "no server TTS provider available");
@@ -279,12 +277,24 @@ export async function speak(text: string, opts: { voice: VoiceSettings; emotion:
     if (r.status === 200) {
       opts.onProvider?.(r.headers.get("X-TTS-Provider") ?? "server");
       const blob = await r.blob();
+      if (canceled()) return;
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       currentAudio = audio;
       // Speed is already baked in server-side (emotion + character sliders), so don't re-apply it here.
       await new Promise<void>((resolve) => {
-        const done = () => { stopMouth(opts.onMouth); opts.onEnd?.(); resolve(); };
+        let finished = false;
+        const done = () => {
+          if (finished) return;
+          finished = true;
+          URL.revokeObjectURL(url);
+          sourceCache.get(audio)?.disconnect();
+          stopMouth(opts.onMouth);
+          opts.onEnd?.();
+          if (finishPlayback === done) finishPlayback = null;
+          resolve();
+        };
+        finishPlayback = done;
         audio.onplay = () => {
           opts.onStart?.();
           if (opts.onMouth) attachLipSync(audio, opts.onMouth);
@@ -301,10 +311,21 @@ export async function speak(text: string, opts: { voice: VoiceSettings; emotion:
   }
 
   // 2) Browser speechSynthesis fallback
-  if (typeof window === "undefined" || !window.speechSynthesis) return;
+  if (canceled() || typeof window === "undefined" || !window.speechSynthesis) return;
   opts.onProvider?.("browser");
   await ensureVoices(); // wait for the voice list so we don't speak silently on first load
+  if (canceled()) return;
   await new Promise<void>((resolve) => {
+    let finished = false;
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      stopMouth(opts.onMouth);
+      opts.onEnd?.();
+      if (finishPlayback === done) finishPlayback = null;
+      resolve();
+    };
+    finishPlayback = done;
     const u = new SpeechSynthesisUtterance(clean);
     const lang = opts.lang && opts.lang !== "auto" ? langToBcp47(opts.lang) : detectLangFromText(clean);
     u.lang = lang;
@@ -315,11 +336,11 @@ export async function speak(text: string, opts: { voice: VoiceSettings; emotion:
     if (v) u.voice = v;
     u.onstart = () => {
       opts.onStart?.();
-      // No audio node for speechSynthesis, so flap the mouth for the utterance duration.
-      if (opts.onMouth) syntheticMouth(null, opts.onMouth);
+      // Browser synthesis does not expose audio samples; keep the mouth closed.
+      stopMouth(opts.onMouth);
     };
-    u.onend = () => { stopMouth(opts.onMouth); opts.onEnd?.(); resolve(); };
-    u.onerror = () => { stopMouth(opts.onMouth); opts.onEnd?.(); resolve(); };
+    u.onend = done;
+    u.onerror = done;
     currentUtterance = u;
     // Chrome sometimes leaves the queue paused; nudge it.
     window.speechSynthesis.resume();

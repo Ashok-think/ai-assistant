@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import CharacterAvatar, { type AvatarEmotion } from "./CharacterAvatar";
-import VideoCharacter from "./VideoCharacter";
+import type { AvatarEmotion } from "./CharacterAvatar";
+import CompanionStage from "./CompanionStage";
+import Link from "next/link";
+import { ArrowUp, ArrowUpRight, AudioLines, ChevronDown, Mic, Paperclip, Plus, Radio, SlidersHorizontal, Square, Volume2, VolumeX } from "lucide-react";
 import Waveform from "./Waveform";
 import ActionTimeline from "./ActionTimeline";
 import ToolConfirmation from "./ToolConfirmation";
@@ -40,13 +42,10 @@ type RouteInfo = { tier: string; provider: string; model: string; reason: string
 const reEscape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const QUICK = [
-  { label: "☀️ Weather", text: "What's the weather in Delhi today?" },
-  { label: "⏰ Remind me", text: "Remind me to drink water in 20 minutes" },
-  { label: "📝 Todos", text: "Show my todos" },
-  { label: "🌐 Open YouTube", text: "open youtube" },
-  { label: "🖥️ Read my screen", text: "what's on my screen?" },
-  { label: "💬 Check-in", text: "I'm feeling okay today" },
-  { label: "🌅 Morning routine", text: "__routine__" },
+  { label: "Plan my day", text: "Help me plan my day using my todos and reminders." },
+  { label: "Read my screen", text: "what's on my screen?" },
+  { label: "Open YouTube", text: "open youtube" },
+  { label: "Set a reminder", text: "Remind me to drink water in 20 minutes" },
 ];
 
 export default function Home() {
@@ -344,17 +343,22 @@ export default function Home() {
   const send = useCallback(
     async (text: string, opts?: { hidden?: boolean }) => {
       const t = text.trim();
-      if (!t || busyRef.current) return;
-      const hidden = opts?.hidden ?? false;
-      stopSpeaking();
-      setTalking(false);
-      setMouth({ level: 0, viseme: "closed" });
-      // Spoken "stop"/"cancel" is an interrupt, not a message to answer.
+      if (!t) return;
+      // Interrupts must be handled before the busy guard.
       if (/^(stop|cancel|quiet|shush|shut up|be quiet|enough)\b/i.test(t)) {
+        stopSpeaking();
+        speakingRef.current = false;
+        setTalking(false);
+        setMouth({ level: 0, viseme: "closed" });
         chatAbortRef.current?.abort();
         setStatus("");
         return;
       }
+      if (busyRef.current) return;
+      const hidden = opts?.hidden ?? false;
+      stopSpeaking();
+      setTalking(false);
+      setMouth({ level: 0, viseme: "closed" });
       if (t === "__routine__") return runRoutine();
 
       // Client-side voice command: switch character
@@ -393,7 +397,8 @@ export default function Home() {
       setLatency({ sttFinal });
       try {
         const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: t, conversationId: convRef.current }), signal: ctl.signal });
-        const reader = res.body!.getReader();
+        if (!res.ok || !res.body) throw new Error(`Chat is unavailable (${res.status}). Please try again.`);
+        const reader = res.body.getReader();
         const dec = new TextDecoder();
         let buf = "";
         while (true) {
@@ -472,6 +477,9 @@ export default function Home() {
           setMsgs((m) => m.map((x) => (x.id === pendingId ? { ...x, pending: false, content: `Connection hiccup: ${e instanceof Error ? e.message : "unknown"}`, emotion: "sad" } : x)));
         }
       } finally {
+        setMsgs((messages) => messages.map((message) => message.id === pendingId && message.pending
+          ? { ...message, pending: false, content: message.content || (ctl.signal.aborted ? "Response stopped." : "The connection ended before a reply arrived. Please try again."), emotion: "neutral" }
+          : message));
         setBusy(false);
         busyRef.current = false;
         chatAbortRef.current = null;
@@ -479,9 +487,9 @@ export default function Home() {
         setAgentStep(null);
         setAgentTool(null);
       }
-      for (const q of queued) await runAction(q.id, q.action);
+      if (!ctl.signal.aborted) for (const q of queued) await runAction(q.id, q.action);
     },
-    [load, runAction, runRoutine, say, switchCharacter],
+    [load, pushToast, runAction, runRoutine, say, switchCharacter],
   );
   sendRef.current = send;
 
@@ -523,11 +531,16 @@ export default function Home() {
           else interimText += txt;
         }
         const heard = normalizeHeard(finalBuf + " " + interimText);
-        // BARGE-IN. While the assistant is SPEAKING, the mic can pick up its own audio, so require
-        // either the wake word or a longer phrase (>~3 words) to treat it as a real interruption —
-        // this avoids echo false-triggers. When NOT speaking, any speech is a normal turn.
+        // Browser STT cannot distinguish the speaker from its own TTS. Only explicit wake/stop
+        // commands interrupt playback; arbitrary multiword echo must never become a new request.
         const wakeHit = matchesWake(finalBuf + " " + interimText, (s?.settings.wakeWord ?? "hey rio")).hit;
-        const looksIntentional = wakeHit || heard.split(" ").length >= 3;
+        const stopHit = /^(stop|cancel|quiet|shush|enough|be quiet)[.!?]*$/i.test(heard);
+        const looksIntentional = wakeHit || stopHit;
+        if (speakingRef.current && !looksIntentional) {
+          finalBuf = "";
+          if (silenceTimer) clearTimeout(silenceTimer);
+          return;
+        }
         if (speakingRef.current && looksIntentional) {
           // Immediately clear queued/playing TTS + lip-sync so old audio can't leak into the new turn.
           stopSpeaking();
@@ -541,6 +554,13 @@ export default function Home() {
           setTalking(false);
           chatAbortRef.current.abort();
           chatAbortRef.current = null;
+        }
+        if (stopHit) {
+          void send("stop");
+          finalBuf = "";
+          setInterim("");
+          if (silenceTimer) clearTimeout(silenceTimer);
+          return;
         }
         if (!awake) {
           // Fuzzy, punctuation-tolerant wake match (handles "Hey, Rio!" and small mis-hears).
@@ -564,6 +584,7 @@ export default function Home() {
         setInterim(shown);
         if (silenceTimer) clearTimeout(silenceTimer);
         silenceTimer = setTimeout(() => {
+          if (recRef.current !== rec) return;
           const cmd = normalizeHeard(
             finalBuf.replace(new RegExp(reEscape(wake), "gi"), " ").replace(new RegExp(reEscape(wakeName), "gi"), " "),
           );
@@ -720,18 +741,21 @@ export default function Home() {
   const stateHud = stateLabel(charState, agentTool);
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-4 lg:grid-cols-[420px_1fr]">
+    <div className="command-room">
+      <header className="command-header">
+        <div className="flex items-center gap-3"><span className="wordmark">JARVISH<span className="text-primary">.</span></span><span className="header-divider" /><span className="text-sm text-muted-foreground">Your personal companion</span></div>
+        <Link href="/settings" className="connection-pill"><span className="status-dot" />{state.online ? "Cloud configured" : "Local mode"}<SlidersHorizontal size={15} /></Link>
+      </header>
       {/* LEFT: Character HUD */}
-      <section className="panel relative overflow-hidden p-5">
-        <div className="hud-grid absolute inset-0 opacity-70" />
+      <section className="panel character-panel">
         <div className="relative">
           <div className="flex items-start justify-between">
             <div>
-              <div className="text-[10px] uppercase tracking-[0.25em] text-cyan-300/80">Active persona</div>
-              <h1 className="mt-1 text-2xl font-semibold neon-text" style={{ color: c.accent }}>{c.name}</h1>
-              <p className="text-xs text-slate-400">{c.tagline}</p>
+              <div className="eyebrow">A LITTLE MORE HUMAN</div>
+              <h1 className="character-name text-balance">Meet {c.name}<span className="text-primary">.</span></h1>
+              <p className="text-sm text-muted-foreground">A familiar voice. A mind of possibilities.</p>
             </div>
-            <button className="btn btn-ghost !px-3 !py-1.5 text-xs" onClick={() => setShowChars((v) => !v)}>🎭 Switch</button>
+            <button className="icon-button" aria-label="Switch character" aria-expanded={showChars} onClick={() => setShowChars((v) => !v)}><ChevronDown size={18} /></button>
           </div>
 
           {showChars && (
@@ -745,16 +769,10 @@ export default function Home() {
             </div>
           )}
 
-          <div className="mt-2 flex justify-center">
-            {state.settings.renderMode === "video" ? (
-              <VideoCharacter emotion={charEmotion} talking={talking} listening={listening} size={280} accent={c.accent} />
-            ) : (
-              <CharacterAvatar color={c.color} accent={c.accent} emoji={c.emoji} emotion={charEmotion} talking={talking} listening={listening} size={280} mouthLevel={state.settings.lipSyncEnabled === false ? 0 : mouth.level} viseme={mouth.viseme} />
-            )}
-          </div>
+          <CompanionStage emotion={charEmotion} state={charState} talking={talking} listening={listening} mouth={mouth} lipSync={state.settings.lipSyncEnabled !== false} browserVoice={lastTtsProvider === "browser"} />
 
-          <div className="mt-1 flex items-center justify-center gap-2 text-xs text-slate-400">
-            <span className={`chip ${charState === "error" ? "text-rose-300" : charState === "success" ? "text-emerald-300" : charState === "idle" ? "" : "text-cyan-300"}`}>{stateHud.icon} {stateHud.text}</span>
+          <div className="voice-state flex flex-wrap items-center justify-center gap-2 text-sm text-muted-foreground">
+            <span className={`chip ${charState === "error" ? "text-rose-300" : charState === "success" ? "text-emerald-300" : charState === "idle" ? "" : "text-cyan-300"}`}>{stateHud.text}</span>
             <span className="chip">mood: {charEmotion}</span>
             {talking && <span className="chip text-cyan-300">speaking{lastTtsProvider ? ` · ${lastTtsProvider}` : ""}</span>}
             {lastTtsProvider === "browser" && ttsFallbackReason && <span className="chip text-amber-300" title={ttsFallbackReason}>browser fallback</span>}
@@ -771,7 +789,7 @@ export default function Home() {
             onClick={() => setAutoListen((v) => !v)}
             title="Hands-free: JARVIS listens, detects end of speech, and replies automatically"
           >
-            {autoListen ? "🎧 Auto Listen: ON (hands-free)" : "🎧 Auto Listen: OFF"}
+            <AudioLines size={19} /> {autoListen ? "End voice session" : "Start a conversation"} <span className="ml-auto"><ArrowUpRight size={18} /></span>
           </button>
 
           {/* Voice controls */}
@@ -782,21 +800,22 @@ export default function Home() {
               disabled={busy || autoListen}
               title="Push to talk"
             >
-              🎙️ {listening && !wakeArmed ? "Stop" : "Talk"}
+              <Mic size={16} /> {listening && !wakeArmed ? "Stop mic" : "Talk"}
             </button>
             <button className={`btn ${wakeArmed ? "btn-primary" : "btn-ghost"}`} onClick={() => (wakeArmed ? stopListening() : startListening("wake"))} title="Always-on wake word">
-              👂 {wakeArmed ? "Armed" : "Wake word"}
+              <Radio size={16} /> {wakeArmed ? "Armed" : "Wake"}
             </button>
             <button className="btn btn-ghost" onClick={() => { setVoiceOn((v) => !v); stopSpeaking(); setTalking(false); setMouth({ level: 0, viseme: "closed" }); chatAbortRef.current?.abort(); }}>
-              {voiceOn ? "🔊 Voice on" : "🔇 Muted"}
+              {voiceOn ? <Volume2 size={16} /> : <VolumeX size={16} />} {voiceOn ? "Voice" : "Muted"}
             </button>
           </div>
           <p className="mt-2 text-center text-[11px] text-slate-500">
             {autoListen
-              ? "Just speak — I'll detect when you finish and reply. Talk over me to interrupt."
-              : <>Say <span className="text-cyan-300">“{state.settings.wakeWord}”</span> · “switch to {state.characters.find((x) => x.id !== c.id)?.name ?? "Sora"}” · talk over me to interrupt</>}
+              ? "Listening hands-free. Say “stop” or your wake word to interrupt."
+              : <>Enable Wake, then say <span className="text-primary">“{state.settings.wakeWord}”</span>. Your microphone stays off until enabled.</>}
           </p>
 
+          <details className="engine-details"><summary>Under the hood <SlidersHorizontal size={14} /></summary>
           {/* Router HUD */}
           <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-3">
             <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-slate-400">
@@ -873,21 +892,23 @@ export default function Home() {
               {state.todos.length ? state.todos.slice(0, 3).map((t) => <div key={t.id} className="truncate text-slate-300">☐ {t.title}</div>) : <div className="text-slate-500">All clear</div>}
             </div>
           </div>
+          </details>
         </div>
       </section>
 
       {/* RIGHT: Chat */}
-      <section className="panel flex min-h-[70vh] flex-col p-4 lg:h-[calc(100vh-2rem)]">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="text-sm font-medium text-slate-200">Chat with {state.settings.assistantName} <span className="text-slate-500">as {c.name}</span></div>
-          <button className="text-xs text-slate-400 hover:text-white" onClick={() => { convRef.current = null; window.localStorage.removeItem("convId"); setMsgs([{ id: "greet", role: "assistant", content: state.greeting, emotion: c.defaultMood as AvatarEmotion, characterName: c.name }]); }}>+ New chat</button>
+      <section className="panel conversation-panel">
+        <div className="conversation-header">
+          <div className="flex items-center gap-2"><span className="status-dot" /><span className="text-sm font-medium">Conversation</span><span className="text-sm text-muted-foreground">/ {c.name}</span></div>
+          <button className="text-xs text-slate-400 hover:text-white" onClick={() => { convRef.current = null; window.localStorage.removeItem("convId"); setMsgs([{ id: "greet", role: "assistant", content: state.greeting, emotion: c.defaultMood as AvatarEmotion, characterName: c.name }]); }}><Plus size={15} className="inline" /> New</button>
         </div>
 
-        <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto pr-1">
+        <div ref={listRef} className="conversation-messages" role="log" aria-label="Conversation messages" aria-live="polite">
+          {msgs.length <= 1 && <div className="conversation-welcome"><div className="welcome-symbol"><AudioLines size={28} strokeWidth={1.3} /></div><p className="eyebrow">YOUR SPACE TO THINK OUT LOUD</p><h2 className="text-balance">Big ideas.<br />Everyday things.<br /><span className="text-muted-foreground">I&apos;m here for all of it.</span></h2></div>}
           {msgs.map((m) => (
             <div key={m.id} className={`anim-fade-up flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${m.role === "user" ? "bg-gradient-to-br from-violet-600/80 to-fuchsia-600/70 text-white" : "border border-white/10 bg-white/5 text-slate-100"}`}>
-                {m.role === "assistant" && <div className="mb-1 text-[10px] uppercase tracking-widest" style={{ color: c.accent }}>{m.characterName ?? c.name}{m.emotion ? ` · ${m.emotion}` : ""}</div>}
+              <div className={`message-bubble ${m.role === "user" ? "message-user" : "message-assistant"}`}>
+                {m.role === "assistant" && <div className="mb-1 text-[10px] uppercase tracking-widest" style={{ color: "var(--primary)" }}>{m.characterName ?? c.name}{m.emotion ? ` · ${m.emotion}` : ""}</div>}
                 {m.pending ? (
                   <div className="flex items-center gap-2 text-slate-400">
                     <span className="h-2 w-2 animate-bounce rounded-full bg-cyan-300" />
@@ -945,22 +966,26 @@ export default function Home() {
 
         <ActionTimeline actions={actions} onRetry={retryAction} onDismiss={(id) => setActions((a) => a.filter((x) => x.id !== id))} />
 
-        <div className="mt-3 flex flex-wrap gap-1.5">
+        <div className="quick-suggestions">
           {QUICK.map((q) => (
-            <button key={q.label} className="chip hover:bg-white/10" onClick={() => send(q.text)} disabled={busy}>{q.label}</button>
+            <button key={q.label} onClick={() => send(q.text)} disabled={busy}>{q.label}<ArrowUpRight size={14} /></button>
           ))}
         </div>
 
         <form
-          className="mt-2 flex gap-2"
+          className="message-composer"
           onSubmit={(e) => { e.preventDefault(); send(input); }}
         >
-          <input className="input" placeholder={`Message ${c.name}… (English / Hindi / Hinglish / 日本語)`} value={input} onChange={(e) => setInput(e.target.value)} disabled={busy} />
+          <input className="composer-input" aria-label="Message your companion" placeholder={`Ask ${c.name} anything…`} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.nativeEvent.isComposing || e.keyCode === 229)) e.preventDefault(); }} disabled={busy} />
           <input ref={fileInputRef} type="file" accept="image/*,.pdf,.docx,.txt,.csv,.md" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFilePicked(f); e.target.value = ""; }} />
-          <button type="button" className="btn btn-ghost" title="Attach image or document" onClick={() => fileInputRef.current?.click()} disabled={busy}>📎</button>
-          <button type="button" className={`btn ${listening ? "btn-primary" : "btn-ghost"}`} onClick={() => (listening ? stopListening() : startListening("once"))}>🎙️</button>
-          <button type="submit" className="btn btn-primary" disabled={busy || !input.trim()}>Send</button>
+          <div className="composer-tools"><div className="flex items-center gap-1">
+          <button type="button" className="icon-button" aria-label="Attach image or document" onClick={() => fileInputRef.current?.click()} disabled={busy}><Paperclip size={18} /></button>
+          <button type="button" className={`icon-button ${listening ? "text-primary" : ""}`} aria-label={listening ? "Stop microphone" : "Start microphone"} onClick={() => (listening ? stopListening() : startListening("once"))}><Mic size={18} /></button>
+          <span className="text-sm text-muted-foreground">English · తెలుగు · हिन्दी</span></div>
+          {busy || talking ? <button type="button" className="send-button" aria-label="Stop response" onClick={() => { chatAbortRef.current?.abort(); stopSpeaking(); speakingRef.current = false; setTalking(false); setMouth({ level: 0, viseme: "closed" }); }}><Square size={16} /></button> : <button type="submit" className="send-button" aria-label="Send message" disabled={!input.trim()}><ArrowUp size={19} /></button>}
+          </div>
         </form>
+        <p className="composer-note">You&apos;re in control. Actions that need permission ask first.</p>
       </section>
 
       {/* Toasts (proactive notifications) */}

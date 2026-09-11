@@ -25,6 +25,10 @@ export async function GET() {
     openrouterKey: st.openrouterKey ? "••••" : null,
     geminiKey: st.geminiKey ? "••••" : null,
     elevenLabsKey: st.elevenLabsKey ? "••••" : null,
+    tokenrouterKey: st.tokenrouterKey ? "••••" : null,
+    qwenKey: st.qwenKey ? "••••" : null,
+    aihubKey: st.aihubKey ? "••••" : null,
+    customKey: st.customKey ? "••••" : null,
   };
 
   return Response.json({
