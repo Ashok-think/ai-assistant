@@ -26,6 +26,7 @@ type Character = {
 type Settings = {
   assistantName: string; wakeWord: string; userName: string; language: string; activeCharacterId: number | null;
   voiceEnabled: boolean; wakeWordEnabled: boolean; freeOnlyMode: boolean; lowPowerMode: boolean; routerMode: string; dailyBudgetUsd: number;
+  ttsProvider: string; ttsModel: string; ttsVoice: string;
   renderMode?: string; lipSyncEnabled?: boolean;
 };
 type State = {
@@ -202,7 +203,7 @@ export default function Home() {
       // handler to treat input as a barge-in (and it ignores very short/echo-like fragments).
       speakingRef.current = true;
       await speak(text, {
-        voice: s.character.voice, emotion: emo, lang: s.settings.language,
+        voice: { ...s.character.voice, ttsModel: s.settings.ttsModel, ttsVoice: s.settings.ttsVoice }, emotion: emo, lang: s.settings.language,
         onStart: () => { setTalking(true); if (reqStart) setLatency((l) => ({ ...(l ?? {}), firstAudio: Math.round(performance.now() - reqStart) })); },
         onEnd: () => setTalking(false), onMouth: setMouth,
         onProvider: (p) => { setLastTtsProvider(p); if (p !== "browser") setTtsFallbackReason(""); },

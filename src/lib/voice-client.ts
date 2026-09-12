@@ -11,7 +11,7 @@ import { toSpeechText } from "./speech-text";
  *  The Flutter app swaps these for Porcupine/openWakeWord + Whisper + ElevenLabs streaming.
  */
 
-export type VoiceSettings = { pitch: number; rate: number; warmth: number; elevenLabsVoiceId?: string; geminiVoice?: string; lang?: string };
+export type VoiceSettings = { pitch: number; rate: number; warmth: number; elevenLabsVoiceId?: string; geminiVoice?: string; ttsModel?: string; ttsVoice?: string; lang?: string };
 
 type SR = {
   lang: string;
@@ -206,7 +206,7 @@ export async function speak(text: string, opts: { voice: VoiceSettings; emotion:
     const r = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: clean, voiceId: opts.voice.elevenLabsVoiceId, geminiVoice: opts.voice.geminiVoice, emotion: opts.emotion }),
+      body: JSON.stringify({ text: clean, voiceId: opts.voice.elevenLabsVoiceId, geminiVoice: opts.voice.geminiVoice, model: opts.voice.ttsModel, voice: opts.voice.ttsVoice, emotion: opts.emotion }),
       signal: controller.signal,
     });
     if (canceled()) return;

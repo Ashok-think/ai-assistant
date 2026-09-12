@@ -18,8 +18,13 @@ export const settings = sqliteTable("settings", {
   lowPowerMode: integer("low_power_mode", { mode: "boolean" }).notNull().default(false),
   voiceEnabled: integer("voice_enabled", { mode: "boolean" }).notNull().default(true),
   wakeWordEnabled: integer("wake_word_enabled", { mode: "boolean" }).notNull().default(false),
-  // TTS engine preference: auto (Gemini→ElevenLabs→browser) | gemini | elevenlabs | browser
+  // TTS engine preference: auto | gemini | elevenlabs | openrouter-fish | browser
   ttsProvider: text("tts_provider").notNull().default("auto"),
+  ttsModel: text("tts_model").notNull().default("fish-audio/s2.1-pro"),
+  ttsVoice: text("tts_voice").notNull().default("default"),
+  chatModelMode: text("chat_model_mode").notNull().default("auto"), // auto | selected
+  chatProvider: text("chat_provider"),
+  chatModel: text("chat_model"),
   // ---- Master character voice (ONE locked voice identity across every response) ----
   masterVoiceEnabled: integer("master_voice_enabled", { mode: "boolean" }).notNull().default(true),
   masterGeminiVoice: text("master_gemini_voice").notNull().default("Leda"), // warm female prebuilt

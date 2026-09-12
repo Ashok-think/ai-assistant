@@ -19,7 +19,9 @@ type Body = {
   voiceId?: string; // ElevenLabs voice id override
   geminiVoice?: string; // Gemini prebuilt voice name override
   emotion?: string;
-  provider?: "gemini" | "elevenlabs";
+  provider?: "gemini" | "elevenlabs" | "openrouter-fish";
+  model?: string;
+  voice?: string;
 };
 
 type Attempt = { provider: string; status: string | number };
@@ -72,16 +74,38 @@ export async function POST(req: Request) {
     : raw;
   const attempts: Attempt[] = [];
 
-  // Respect the user's engine preference from Settings (auto | gemini | elevenlabs | browser).
-  const pref = (st.ttsProvider ?? "auto") as "auto" | "gemini" | "elevenlabs" | "browser";
-  let order: ("gemini" | "elevenlabs")[];
+  // Respect the user's engine preference from Settings.
+  const pref = (st.ttsProvider ?? "auto") as "auto" | "gemini" | "elevenlabs" | "openrouter-fish" | "browser";
+  let order: ("gemini" | "elevenlabs" | "openrouter-fish")[];
   if (body.provider) order = [body.provider];
-  else if (pref === "browser") order = []; // skip server TTS → 204 → browser speaks
-  else if (pref === "gemini") order = ["gemini", "elevenlabs"];
-  else if (pref === "elevenlabs") order = ["elevenlabs", "gemini"];
-  else order = ["gemini", "elevenlabs"];
+  else if (pref === "browser") order = [];
+  else if (pref === "gemini") order = ["gemini", "openrouter-fish", "elevenlabs"];
+  else if (pref === "elevenlabs") order = ["elevenlabs", "openrouter-fish", "gemini"];
+  else if (pref === "openrouter-fish") order = ["openrouter-fish", "gemini", "elevenlabs"];
+  else order = ["openrouter-fish", "gemini", "elevenlabs"];
 
   for (const provider of order) {
+    // ---- OpenRouter Fish Audio (OpenAI-compatible speech endpoint) ----
+    if (provider === "openrouter-fish") {
+      const key = process.env.OPENROUTER_API_KEY?.trim() || st.openrouterKey?.trim();
+      if (!key) { attempts.push({ provider, status: "skip: no OPENROUTER_API_KEY" }); continue; }
+      const model = body.model?.trim() || st.ttsModel?.trim() || "fish-audio/s2.1-pro";
+      const voice = body.voice?.trim() || st.ttsVoice?.trim() || "";
+      try {
+        const r = await fetch("https://openrouter.ai/api/v1/audio/speech", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "HTTP-Referer": new URL(req.url).origin, "X-Title": "JARVISH" },
+          body: JSON.stringify({ model, input: clean, ...(voice && voice !== "default" ? { voice } : {}), response_format: "mp3" }),
+          signal: AbortSignal.timeout(30000),
+        });
+        if (!r.ok) { attempts.push({ provider, status: r.status }); continue; }
+        const bytes = new Uint8Array(await r.arrayBuffer());
+        if (!bytes.byteLength) { attempts.push({ provider, status: "empty" }); continue; }
+        attempts.push({ provider, status: 200 });
+        return audioResponse(toArrayBuffer(bytes), "audio/mpeg", provider, `${model}:${voice}`, emotion, attempts);
+      } catch (e) { attempts.push({ provider, status: `error: ${(e as Error).message}` }); continue; }
+    }
+
     // ---- 1) Gemini TTS (free tier, good quality, steered with a style instruction) ----
     if (provider === "gemini") {
       const geminiKey = process.env.GEMINI_API_KEY?.trim() || st.geminiKey?.trim();
@@ -191,9 +215,14 @@ export async function POST(req: Request) {
  * Never claims premium quality — this is exactly why the browser voice is speaking.
  */
 function fallbackReason(attempts: Attempt[]): string {
+  const fish = attempts.find((a) => a.provider === "openrouter-fish");
   const gem = attempts.find((a) => a.provider === "gemini");
   const el = attempts.find((a) => a.provider === "elevenlabs");
   const parts: string[] = [];
+  if (fish) {
+    if (typeof fish.status === "string" && fish.status.startsWith("skip")) parts.push("no OpenRouter key");
+    else if (fish.status !== 200) parts.push(`Fish Audio TTS error ${fish.status}`);
+  }
   if (gem) {
     if (gem.status === 429) parts.push("Gemini TTS rate/quota limit (429)");
     else if (typeof gem.status === "string" && gem.status.startsWith("skip")) parts.push("no Gemini key");

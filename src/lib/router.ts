@@ -193,6 +193,8 @@ export async function routeChain(opts: {
   historyChars: number;
   systemPromptChars: number;
   forceTier?: Tier;
+  selectedProvider?: string | null;
+  selectedModel?: string | null;
 }): Promise<RouteDecision[]> {
   const { settings: s } = opts;
   const complexity = classifyComplexity(opts.message, opts.historyChars);
@@ -200,6 +202,14 @@ export async function routeChain(opts: {
   const spent = await todaySpend();
   const catalog = buildCatalog(s);
   const reasons: string[] = [];
+
+  if (s.chatModelMode === "selected" && s.chatProvider && s.chatModel) {
+    const selected = catalog.find((entry) => entry.spec.provider === s.chatProvider && entry.spec.model === s.chatModel);
+    if (selected) {
+      return [{ tier: selected.tier, spec: selected.spec, apiKey: selected.key, reason: `selected model ${s.chatProvider}/${s.chatModel}`, complexity, estimatedInputTokens, budgetUsedUsd: spent, budgetUsd: s.dailyBudgetUsd }, { tier: "offline", spec: OFFLINE_SPEC, apiKey: null, reason: "selected model failed → offline persona engine", complexity, estimatedInputTokens, budgetUsedUsd: spent, budgetUsd: s.dailyBudgetUsd }];
+    }
+    reasons.push(`selected model unavailable: ${s.chatProvider}/${s.chatModel}`);
+  }
 
   let wanted: Tier = complexity >= 0.45 ? "smart" : "fast";
   reasons.push(`complexity ${(complexity * 100).toFixed(0)}% → ${wanted}`);

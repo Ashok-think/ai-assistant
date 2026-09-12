@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 type Settings = {
   assistantName: string; wakeWord: string; userName: string; language: string; freeOnlyMode: boolean; safeMode: boolean; lowPowerMode: boolean;
-  voiceEnabled: boolean; wakeWordEnabled: boolean; proactiveEnabled: boolean; dailyBudgetUsd: number; routerMode: string; ttsProvider: string;
+  voiceEnabled: boolean; wakeWordEnabled: boolean; proactiveEnabled: boolean; dailyBudgetUsd: number; routerMode: string; ttsProvider: string; ttsModel: string; ttsVoice: string; chatModelMode: string; chatProvider: string | null; chatModel: string | null;
   masterVoiceEnabled: boolean; masterGeminiVoice: string; masterElevenVoiceId: string | null; voiceSpeed: number; emotionIntensity: number;
   customVoiceStatus: string; renderMode: string; lipSyncEnabled: boolean;
   openaiKey: string; groqKey: string; openrouterKey: string; elevenLabsKey: string; ollamaUrl: string | null;
@@ -271,7 +271,7 @@ export default function SettingsPage() {
             </div>
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <ToggleControl label="Voice replies" desc="Speak answers aloud (ElevenLabs → browser TTS)" value={s.voiceEnabled} onToggle={() => patch({ voiceEnabled: !s.voiceEnabled })} />
+            <ToggleControl label="Voice replies" desc="Speak answers aloud (Fish Audio → Gemini → ElevenLabs → browser)" value={s.voiceEnabled} onToggle={() => patch({ voiceEnabled: !s.voiceEnabled })} />
             <ToggleControl label="Proactive mode" desc="Check-ins, nudges, reminders" value={s.proactiveEnabled} onToggle={() => patch({ proactiveEnabled: !s.proactiveEnabled })} />
             <ToggleControl label="Safe / parental mode" desc="Family-friendly, no flirting" value={s.safeMode} onToggle={() => patch({ safeMode: !s.safeMode })} />
             <ToggleControl label="Low battery mode" desc="Disables heavy animations, prefers fast models" value={s.lowPowerMode} onToggle={() => patch({ lowPowerMode: !s.lowPowerMode })} />
@@ -281,16 +281,19 @@ export default function SettingsPage() {
         {/* Voice engine */}
         <section className="panel p-4">
           <h2 className="mb-1 text-sm font-semibold uppercase tracking-widest text-slate-400">Voice engine</h2>
-          <p className="mb-3 text-xs text-slate-500">Choose which text-to-speech engine speaks. Auto tries Gemini (free) then ElevenLabs (premium) then the browser. Test it to see exactly which one works with your keys.</p>
+          <p className="mb-3 text-xs text-slate-500">Choose which text-to-speech engine speaks. Auto tries Fish Audio via OpenRouter, then Gemini, ElevenLabs, and finally the browser. Test it to see exactly which one returned playable audio.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div><label className="label">TTS engine</label>
               <select className="input" value={s.ttsProvider} onChange={(e) => patch({ ttsProvider: e.target.value })}>
-                <option value="auto">Auto (Gemini → ElevenLabs → browser)</option>
-                <option value="gemini">Gemini TTS (free, needs Gemini key)</option>
-                <option value="elevenlabs">ElevenLabs (premium, needs key)</option>
-                <option value="browser">Browser speech (offline, no key)</option>
+                <option value="auto">Auto (Fish Audio → Gemini → ElevenLabs → browser)</option>
+                <option value="openrouter-fish">Fish Audio via OpenRouter</option>
+                <option value="gemini">Gemini TTS</option>
+                <option value="elevenlabs">ElevenLabs</option>
+                <option value="browser">Browser speech (offline)</option>
               </select>
             </div>
+            <div><label className="label">TTS model</label><input className="input" value={s.ttsModel} onChange={(e) => setS({ ...s, ttsModel: e.target.value })} onBlur={(e) => patch({ ttsModel: e.target.value.trim() || "fish-audio/s2.1-pro" })} placeholder="fish-audio/s2.1-pro" /></div>
+            <div><label className="label">Fish Audio voice</label><input className="input" value={s.ttsVoice} onChange={(e) => setS({ ...s, ttsVoice: e.target.value })} onBlur={(e) => patch({ ttsVoice: e.target.value.trim() || "default" })} placeholder="default" /></div>
             <div className="flex items-end">
               <button className="btn btn-primary w-full" onClick={testVoice}>🔊 Test voice</button>
             </div>
@@ -432,7 +435,12 @@ export default function SettingsPage() {
             </div>
             <div><label className="label">Daily budget (USD)</label><input className="input" type="number" step="0.1" min="0" defaultValue={s.dailyBudgetUsd} onBlur={(e) => patch({ dailyBudgetUsd: Number(e.target.value) })} /></div>
           </div>
-          <div className="mt-3"><ToggleControl label="Free-only mode" desc="Only route to free providers (Groq free tier, OpenRouter :free, Ollama, offline)" value={s.freeOnlyMode} onToggle={() => patch({ freeOnlyMode: !s.freeOnlyMode })} /></div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+  <div><label className="label">Chat model mode</label><select className="input" value={s.chatModelMode} onChange={(e) => patch({ chatModelMode: e.target.value })}><option value="auto">Auto routing</option><option value="selected">Selected model</option></select></div>
+  <div><label className="label">Chat provider</label><input className="input" value={s.chatProvider ?? ""} onChange={(e) => setS({ ...s, chatProvider: e.target.value })} onBlur={(e) => patch({ chatProvider: e.target.value.trim() || null })} placeholder="openrouter" /></div>
+  <div><label className="label">Chat model</label><input className="input" value={s.chatModel ?? ""} onChange={(e) => setS({ ...s, chatModel: e.target.value })} onBlur={(e) => patch({ chatModel: e.target.value.trim() || null })} placeholder="provider/model-id" /></div>
+  </div>
+  <div className="mt-3"><ToggleControl label="Free-only mode" desc="Only route to free providers (Groq free tier, OpenRouter :free, Ollama, offline)" value={s.freeOnlyMode} onToggle={() => patch({ freeOnlyMode: !s.freeOnlyMode })} /></div>
           {usage && (
             <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
               <div className="flex justify-between text-xs text-slate-300"><span>Spent today</span><span>${usage.today.toFixed(4)} / ${usage.budget.toFixed(2)}</span></div>
