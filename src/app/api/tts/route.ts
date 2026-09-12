@@ -96,7 +96,6 @@ export async function POST(req: Request) {
     const providerStartedAt = Date.now();
     const configuredTimeout = Number(body.latencyTargetMs ?? st.apiLatencyTargetMs ?? policies[provider]?.timeoutMs ?? 12000);
     const timeoutMs = Math.max(1000, Math.min(60000, configuredTimeout));
-    const recordFailure = (status: string | number) => recordTtsMetric({ provider, ok: false, timeToFirstAudioMs: null, totalAudioLatencyMs: Date.now() - providerStartedAt, bytes: 0, error: String(status), measuredAt: new Date().toISOString() });
     // ---- OpenRouter Fish Audio (OpenAI-compatible speech endpoint) ----
     if (provider === "openrouter-fish") {
       const key = process.env.OPENROUTER_API_KEY?.trim() || st.openrouterKey?.trim();
