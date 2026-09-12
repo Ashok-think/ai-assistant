@@ -6,7 +6,7 @@ import { AudioLines, Bot, Brain, CircleHelp, LayoutDashboard, Settings2, Shapes,
 
 const ITEMS = [
   { href: "/", label: "Companion", icon: AudioLines },
-  { href: "/agent", label: "Agent workspace", icon: LayoutDashboard },
+  { href: "/agent", label: "Agent workspace — try in browser", icon: LayoutDashboard },
   { href: "/characters", label: "Characters", icon: Bot },
   { href: "/memory", label: "Memory", icon: Brain },
   { href: "/skills", label: "Skills", icon: Shapes },

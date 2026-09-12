@@ -32,13 +32,13 @@ export default function CloudWorkspace({ email, userId }: { email: string; userI
       <button className="btn btn-ghost" disabled={signingOut} onClick={signOut}><LogOut size={16} />{signingOut ? "Signing out…" : "Sign out"}</button>
     </header>
     {error && <p role="alert" className="mt-4 text-sm">{error}</p>}
-    <div className="my-7 flex items-start gap-3 rounded-2xl border border-border bg-card p-4 text-foreground"><LockKeyhole className="mt-1 shrink-0 text-primary" size={20} /><p className="text-sm leading-relaxed text-muted-foreground">Cloud storage is separate from your local assistant. SQLite has not been imported. Device control, task execution, and automations remain disabled until their secure workflows are implemented.</p></div>
+    <div className="my-7 flex items-start gap-3 rounded-2xl border border-border bg-card p-4 text-foreground"><LockKeyhole className="mt-1 shrink-0 text-primary" size={20} /><div><p className="text-sm font-semibold text-foreground">Web workspace is ready now</p><p className="mt-1 text-sm leading-relaxed text-muted-foreground">Chat, research, YouTube discovery, voice, memory, exports, and settings work in this browser without installing anything. The optional Windows companion adds local file, screen, microphone, and computer actions after you download and pair it.</p></div></div>
     <CompanionOnboarding />
     <nav aria-label="Cloud sections" className="flex flex-wrap gap-2">{tabs.map((item) => <button key={item.entity} aria-pressed={tab.entity === item.entity} onClick={() => { setTab(item); setConversation(null); }} className={`btn ${tab.entity === item.entity ? "btn-primary" : "btn-ghost"}`}>{item.label}</button>)}</nav>
     <section className="mt-7" aria-label={conversation ? "Conversation messages" : tab.label}>
       {conversation && <button className="mb-4 inline-flex items-center gap-2 text-sm text-primary" onClick={() => setConversation(null)}><ArrowLeft size={16} />All conversations</button>}
       <h2 className="text-xl font-semibold">{conversation ? String(conversation.title) : tab.label}</h2>
-      <p className="mb-6 mt-2 text-sm leading-relaxed text-muted-foreground">{conversation ? "Save messages to this conversation. No model is called, and no actions are executed." : tab.description}</p>
+      <p className="mb-6 mt-2 text-sm leading-relaxed text-muted-foreground">{conversation ? "Save messages to this conversation. Cloud records are separate from the browser assistant session." : tab.description}</p>
       <CloudRecords key={conversation?.id ?? tab.entity} entity={conversation ? "messages" : tab.entity} userId={userId} conversationId={conversation?.id} onConversation={setConversation} />
     </section>
   </div>;
