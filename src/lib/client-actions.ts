@@ -74,6 +74,11 @@ export async function performAction(
   opts: { confirm?: (a: ClientAction) => Promise<boolean>; userInitiated?: boolean } = {},
 ): Promise<{ ok: boolean; detail: string; needsTap?: boolean; screenshot?: string }> {
   switch (action.kind) {
+    case "youtube_search": {
+      const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(action.query)}`;
+      const r = openTab(url);
+      return { ok: r.ok, detail: r.ok ? `YouTube search opened for “${action.query}”. Choose a result to play.` : r.detail, needsTap: !r.ok };
+    }
     case "download_artifact": {
       if (!opts.userInitiated) return { ok: false, needsTap: true, detail: "Review this document, then tap Download. No file has been generated yet." };
       try {

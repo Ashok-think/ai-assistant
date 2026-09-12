@@ -1,29 +1,36 @@
 "use client";
 
+import { Check, ChevronDown, CircleAlert, Clock3, FileText, Globe2, Mail, Monitor, MousePointer2, Search, Sparkles, X } from "lucide-react";
+import { useMemo, useState } from "react";
 import type { ActionState } from "@/lib/client-actions";
 
-const DOT: Record<ActionState["status"], string> = {
-  running: "bg-cyan-300 animate-pulse",
-  done: "bg-emerald-400",
-  failed: "bg-rose-400",
-  pending: "bg-amber-300 animate-pulse",
+const ICON: Record<ActionState["action"]["kind"], typeof Globe2> = {
+  open_url: Globe2,
+  youtube_search: Search,
+  compose_message: Mail,
+  capture_screen: Monitor,
+  clipboard: MousePointer2,
+  download_artifact: FileText,
 };
 
-const ICON: Record<ActionState["action"]["kind"], string> = {
-  open_url: "🌐",
-  compose_message: "✉️",
-  capture_screen: "🖥️",
-  clipboard: "📋",
-  download_artifact: "File",
-};
+function friendlyLabel(action: ActionState["action"]) {
+  const label = action.label.toLowerCase();
+  if (label.includes("search") || label.includes("find")) return "Explored the web";
+  if (action.kind === "open_url") return "Opened a website";
+  if (action.kind === "compose_message") return "Prepared a message";
+  if (action.kind === "capture_screen") return "Read the screen";
+  if (action.kind === "clipboard") return "Updated the clipboard";
+  if (action.kind === "download_artifact") return "Created a file";
+  return "Completed a task";
+}
 
-/**
- * What the assistant actually did in the browser, as it happens.
- *
- * The "tap to open" button matters more than it looks: a popup opened from an async stream has
- * lost user activation, so the browser blocks it. Rather than silently failing, the blocked action
- * lands here with a button that carries a fresh click.
- */
+function statusLabel(status: ActionState["status"]) {
+  if (status === "running") return "Working";
+  if (status === "pending") return "Waiting for approval";
+  if (status === "failed") return "Needs attention";
+  return "Done";
+}
+
 export default function ActionTimeline({
   actions,
   onRetry,
@@ -33,39 +40,48 @@ export default function ActionTimeline({
   onRetry: (a: ActionState) => void;
   onDismiss: (id: string) => void;
 }) {
+  const [debugOpen, setDebugOpen] = useState(false);
+  const completed = actions.filter((a) => a.status === "done").length;
+  const visible = useMemo(() => [...actions].reverse(), [actions]);
   if (!actions.length) return null;
+
   return (
-    <div className="mt-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.04] p-2.5">
-      <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-cyan-300/80">
-        <span>Action timeline</span>
-        <span className="text-slate-500">{actions.filter((a) => a.status === "done").length}/{actions.length} done</span>
+    <section className="mt-4 overflow-hidden rounded-2xl border border-border/80 bg-background/70 shadow-sm" aria-label="Assistant activity">
+      <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Sparkles size={15} className="text-primary" aria-hidden="true" />
+          <span className="text-sm font-medium text-foreground">What I did</span>
+        </div>
+        <span className="text-xs text-muted-foreground">{completed}/{actions.length} complete</span>
       </div>
-      <ul className="space-y-1.5">
-        {actions.map((a) => (
-          <li key={a.id} className="anim-fade-up flex items-start gap-2 text-xs">
-            <span className={`mt-1.5 h-1.5 w-1.5 flex-none rounded-full ${DOT[a.status]}`} />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span>{ICON[a.action.kind]}</span>
-                <span className="truncate font-medium text-slate-200">{a.action.label}</span>
-                <span className="ml-auto flex-none text-[10px] text-slate-500">
-                  {new Date(a.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </span>
+      <ol className="divide-y divide-border/50">
+        {visible.map((item) => {
+          const Icon = ICON[item.action.kind] ?? Search;
+          const failed = item.status === "failed";
+          return (
+            <li key={item.id} className="flex gap-3 px-4 py-3">
+              <div className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${failed ? "bg-destructive/10 text-destructive" : item.status === "done" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                {item.status === "done" ? <Check size={14} /> : failed ? <CircleAlert size={14} /> : item.status === "running" ? <Clock3 size={14} className="animate-pulse" /> : <Icon size={14} />}
               </div>
-              {a.detail && <p className={`mt-0.5 break-words ${a.status === "failed" ? "text-rose-300/90" : "text-slate-400"}`}>{a.detail}</p>}
-              {a.action.kind === "download_artifact" && <details className="text-sm text-foreground"><summary>Review {a.action.format.toUpperCase()} content</summary><pre className="max-h-60 overflow-auto whitespace-pre-wrap text-sm">{a.action.content}</pre></details>}
-              {(a.status === "pending" || a.status === "failed") && (a.action.kind === "open_url" || a.action.kind === "compose_message" || a.action.kind === "download_artifact") && (
-                <button className="btn btn-ghost mt-1 !px-2.5 !py-1 text-[11px]" onClick={() => onRetry(a)}>
-                  {a.action.kind === "download_artifact" ? "Download" : "Open it now"}
-                </button>
-              )}
-            </div>
-            <button className="flex-none text-slate-600 hover:text-slate-300" onClick={() => onDismiss(a.id)} aria-label="Dismiss action">
-              ✕
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="text-sm text-foreground">{friendlyLabel(item.action)}</p>
+                  <time className="shrink-0 text-[11px] text-muted-foreground" dateTime={new Date(item.at).toISOString()}>{new Date(item.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
+                </div>
+                <p className={`mt-0.5 text-xs ${failed ? "text-destructive" : "text-muted-foreground"}`}>{failed ? item.detail || "This step could not be completed." : statusLabel(item.status)}</p>
+                {(item.status === "pending" || failed) && (item.action.kind === "open_url" || item.action.kind === "compose_message" || item.action.kind === "download_artifact") && <button className="mt-2 rounded-lg border border-border px-2.5 py-1 text-xs text-foreground hover:bg-muted" onClick={() => onRetry(item)}>{item.action.kind === "download_artifact" ? "Download" : "Try again"}</button>}
+              </div>
+              <button className="self-start text-muted-foreground hover:text-foreground" onClick={() => onDismiss(item.id)} aria-label="Dismiss activity"><X size={14} /></button>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="border-t border-border/50 px-4 py-2">
+        <button className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground" onClick={() => setDebugOpen((open) => !open)} aria-expanded={debugOpen}>
+          <ChevronDown size={13} className={debugOpen ? "rotate-180" : ""} /> Technical details
+        </button>
+        {debugOpen && <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg bg-muted/60 p-2 text-[10px] text-muted-foreground">{actions.map((item) => `${item.action.kind}: ${item.action.label} — ${item.status}${item.detail ? ` — ${item.detail}` : ""}`).join("\n")}</pre>}
+      </div>
+    </section>
   );
 }

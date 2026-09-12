@@ -22,7 +22,23 @@ const skills = [
 export default function CompanionOnboarding() {
   const [selected, setSelected] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
+  const [downloading, setDownloading] = useState(false);
   const toggle = (id: string) => setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  async function downloadWindowsSetup() {
+    setDownloading(true);
+    setNotice("Preparing your Windows setup file…");
+    const response = await fetch("/api/companion/download");
+    if (!response.ok) { setNotice("The setup download could not be prepared. Please retry."); setDownloading(false); return; }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "jarvish-windows-setup.ps1";
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setNotice("Downloaded. Run the setup file on Windows to create your Jarvish folder, then return here to pair it.");
+    setDownloading(false);
+  }
   return (
     <section className="mb-8 overflow-hidden rounded-3xl border border-primary/25 bg-card shadow-[0_24px_80px_rgba(34,211,238,0.08)]">
       <div className="border-b border-border bg-primary/[0.06] p-6 md:p-8">
@@ -35,7 +51,7 @@ export default function CompanionOnboarding() {
           <div className="flex items-center gap-2 rounded-full border border-primary/25 px-3 py-1.5 text-xs text-primary"><Wifi size={14} /> Web demo ready</div>
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
-          <button className="btn btn-primary" onClick={() => setNotice("The Windows companion installer will be available here after pairing is enabled.")}><Download size={16} />Download for Windows</button>
+          <button className="btn btn-primary" disabled={downloading} onClick={downloadWindowsSetup}><Download size={16} />{downloading ? "Preparing…" : "Download for Windows"}</button>
           <button className="btn btn-ghost" onClick={() => setNotice("Android support is planned after the Windows companion foundation.")}><Smartphone size={16} />Android later</button>
         </div>
         {notice && <p role="status" className="mt-4 text-sm text-primary">{notice}</p>}
