@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Cloud, LogOut, ArrowLeft, LockKeyhole } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import CloudRecords, { type CloudRow } from "./CloudRecords";
+import CompanionOnboarding from "./CompanionOnboarding";
 
 const tabs = [
   { entity: "memories", label: "Memory", description: "Facts, preferences, and goals you explicitly choose to save." },
@@ -32,6 +33,7 @@ export default function CloudWorkspace({ email, userId }: { email: string; userI
     </header>
     {error && <p role="alert" className="mt-4 text-sm">{error}</p>}
     <div className="my-7 flex items-start gap-3 rounded-2xl border border-border bg-card p-4 text-foreground"><LockKeyhole className="mt-1 shrink-0 text-primary" size={20} /><p className="text-sm leading-relaxed text-muted-foreground">Cloud storage is separate from your local assistant. SQLite has not been imported. Device control, task execution, and automations remain disabled until their secure workflows are implemented.</p></div>
+    <CompanionOnboarding />
     <nav aria-label="Cloud sections" className="flex flex-wrap gap-2">{tabs.map((item) => <button key={item.entity} aria-pressed={tab.entity === item.entity} onClick={() => { setTab(item); setConversation(null); }} className={`btn ${tab.entity === item.entity ? "btn-primary" : "btn-ghost"}`}>{item.label}</button>)}</nav>
     <section className="mt-7" aria-label={conversation ? "Conversation messages" : tab.label}>
       {conversation && <button className="mb-4 inline-flex items-center gap-2 text-sm text-primary" onClick={() => setConversation(null)}><ArrowLeft size={16} />All conversations</button>}
