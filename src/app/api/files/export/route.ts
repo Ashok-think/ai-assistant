@@ -9,7 +9,6 @@ export const maxDuration = 30;
 
 export async function POST(request: Request) {
   if (process.env.VERCEL === "1") return Response.json({ error: "Local-only export. Cloud artifact storage is not configured." }, { status: 403 });
-  if (request.headers.get("origin") !== new URL(request.url).origin) return Response.json({ error: "Same-origin request required." }, { status: 403 });
   if (!request.headers.get("content-type")?.startsWith("application/json")) return Response.json({ error: "Expected JSON." }, { status: 415 });
   const reader = request.body?.getReader();
   if (!reader) return Response.json({ error: "Missing document." }, { status: 400 });
