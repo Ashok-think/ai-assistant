@@ -11,7 +11,7 @@ import { toSpeechText } from "./speech-text";
  *  The Flutter app swaps these for Porcupine/openWakeWord + Whisper + ElevenLabs streaming.
  */
 
-export type VoiceSettings = { pitch: number; rate: number; warmth: number; elevenLabsVoiceId?: string; geminiVoice?: string; ttsModel?: string; ttsVoice?: string; lang?: string };
+export type VoiceSettings = { pitch: number; rate: number; warmth: number; localVoiceName?: string; elevenLabsVoiceId?: string; geminiVoice?: string; ttsModel?: string; ttsVoice?: string; lang?: string };
 
 type SR = {
   lang: string;
@@ -180,8 +180,12 @@ function ensureVoices(): Promise<SpeechSynthesisVoice[]> {
   });
 }
 
-function pickVoice(lang: string, warmth: number): SpeechSynthesisVoice | null {
+function pickVoice(lang: string, warmth: number, selectedName?: string): SpeechSynthesisVoice | null {
   const voices = window.speechSynthesis.getVoices();
+  if (selectedName) {
+    const selected = voices.find((voice) => voice.name === selectedName);
+    if (selected) return selected;
+  }
   if (!voices.length) return null;
   const base = lang.split("-")[0];
   const sameLang = voices.filter((v) => v.lang.toLowerCase().startsWith(base));
@@ -274,7 +278,7 @@ export async function speak(text: string, opts: { voice: VoiceSettings; emotion:
     const { pitch, rate } = emotionAdjust(opts.emotion, opts.voice);
     u.pitch = pitch;
     u.rate = rate;
-    const v = pickVoice(lang, opts.voice.warmth);
+    const v = pickVoice(lang, opts.voice.warmth, opts.voice.localVoiceName);
     if (v) u.voice = v;
     u.onstart = () => {
       opts.onStart?.();

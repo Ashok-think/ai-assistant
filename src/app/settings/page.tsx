@@ -59,6 +59,8 @@ export default function SettingsPage() {
   const [cloneStatus, setCloneStatus] = useState("");
   const [geminiVoices, setGeminiVoices] = useState<string[]>([]);
   const [elevenVoices, setElevenVoices] = useState<{ id: string; name: string }[]>([]);
+  const [localVoices, setLocalVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [localVoiceName, setLocalVoiceName] = useState("");
   // ElevenLabs real diagnostic state.
   const [el11, setEl11] = useState<{ state: string; detail: string; voice?: string; tier?: string; used?: number; limit?: number } | null>(null);
   const [el11Testing, setEl11Testing] = useState(false);
@@ -78,6 +80,18 @@ export default function SettingsPage() {
   }, []);
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const update = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setLocalVoices(voices);
+      setLocalVoiceName(window.localStorage.getItem("jarvish-local-voice") ?? "");
+    };
+    update();
+    window.speechSynthesis.addEventListener("voiceschanged", update);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", update);
+  }, []);
 
   const patch = async (p: Partial<Settings>) => {
     if (!s) return;
@@ -332,8 +346,17 @@ export default function SettingsPage() {
           <h2 className="mb-1 text-sm font-semibold uppercase tracking-widest text-slate-400">Master character voice</h2>
           <p className="mb-3 text-xs text-slate-500">One consistent female voice for your character everywhere. Emotion changes the delivery, never the identity. When locked, this overrides per-character voices.</p>
           <div className="mb-3"><ToggleControl label="Lock master voice" desc="Use the same voice for every reply (recommended)" value={s.masterVoiceEnabled} onToggle={() => patch({ masterVoiceEnabled: !s.masterVoiceEnabled })} /></div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div><label className="label">Gemini voice (free)</label>
+  <div className="mb-3 rounded-xl border border-cyan-300/15 bg-cyan-300/[0.04] p-3">
+  <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-cyan-200">Local browser voice</div>
+  <p className="mb-3 text-[11px] text-slate-400">Used first on this device. Choose a voice and tune the speed without using cloud TTS.</p>
+  <div className="grid gap-3 sm:grid-cols-2">
+  <div><label className="label">Voice</label><select className="input" value={localVoiceName} onChange={(e) => { const name = e.target.value; setLocalVoiceName(name); window.localStorage.setItem("jarvish-local-voice", name); }}><option value="">Automatic best match</option>{localVoices.map((voice) => <option key={`${voice.name}-${voice.lang}`} value={voice.name}>{voice.name} · {voice.lang}</option>)}</select></div>
+  <div><label className="label flex justify-between"><span>Local speed</span><span>{s.voiceSpeed.toFixed(2)}×</span></label><input aria-label="Local voice speed" type="range" min={0.5} max={1.5} step={0.05} className="w-full accent-cyan-400" value={s.voiceSpeed} onChange={(e) => patch({ voiceSpeed: Number(e.target.value) })} /></div>
+  </div>
+  <button className="btn btn-ghost mt-3 text-xs" onClick={() => { const u = new SpeechSynthesisUtterance("Hi, this is your selected local browser voice."); const selected = localVoices.find((voice) => voice.name === localVoiceName); if (selected) u.voice = selected; u.rate = s.voiceSpeed; window.speechSynthesis.cancel(); window.speechSynthesis.speak(u); }}>Test local voice</button>
+  </div>
+  <div className="grid gap-3 sm:grid-cols-2">
+  <div><label className="label">Gemini voice (free)</label>
               <select className="input" value={s.masterGeminiVoice} onChange={(e) => patch({ masterGeminiVoice: e.target.value })}>
                 {(geminiVoices.length ? geminiVoices : [s.masterGeminiVoice]).map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
