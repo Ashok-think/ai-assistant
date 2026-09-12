@@ -14,14 +14,16 @@ export async function GET() {
     browser: true,
     companion: false,
   };
+  const state = (ready: boolean, detail: string, localOnly = false) => ({ status: ready ? "READY" : localOnly ? "LOCAL_ONLY" : "NEEDS_SETUP", ready, detail });
   const capabilities = [
-    { key: "chat", label: "Chat and planning", ready: true, detail: "Available in the web workspace" },
-    { key: "research", label: "Web research", ready: true, detail: "Search and source collection enabled" },
-    { key: "browser", label: "Browser actions", ready: true, detail: "Actions require browser confirmation" },
-    { key: "exports", label: "Document and spreadsheet exports", ready: true, detail: "Markdown, text, PDF, and XLSX" },
-    { key: "vision", label: "Vision analysis", ready: Boolean(configured.gemini), detail: configured.gemini ? "Gemini vision is configured" : "Add Gemini to enable image analysis" },
-    { key: "device", label: "Windows device control", ready: configured.companion, detail: "Install and pair the Windows companion" },
-    { key: "tts", label: "Voice replies", ready: Object.values(configured).some(Boolean), detail: "Premium providers fall back to browser speech" },
+    { key: "chat", label: "Chat and planning", ...state(true, "Available in the web workspace") },
+    { key: "research", label: "Web research", ...state(true, "Search and source collection enabled") },
+    { key: "browser", label: "Browser actions", ...state(true, "Actions require browser confirmation") },
+    { key: "exports", label: "Document and spreadsheet exports", ...state(true, "Markdown, text, PDF, and XLSX") },
+    { key: "vision", label: "Vision analysis", ...state(Boolean(configured.gemini), configured.gemini ? "Gemini vision is configured" : "Add Gemini to enable image analysis") },
+    { key: "device", label: "Windows device control", ...state(configured.companion, configured.companion ? "Paired Windows companion" : "Install and pair the Windows companion") },
+    { key: "tts", label: "Voice replies", ...state(true, "Browser speech is available locally", true) },
   ];
-  return Response.json({ capabilities, providers: configured, ttsPolicies: policies, recentTtsMetrics: getRecentTtsMetrics(), tools: TOOLS.map((tool) => ({ name: tool.name, skillKey: tool.skillKey, requiresConfirmation: Boolean(tool.requiresConfirmation) })) });
+  const providerStatus = Object.fromEntries(Object.entries(configured).map(([provider, ready]) => [provider, { status: ready ? "READY" : provider === "browser" ? "LOCAL_ONLY" : "NEEDS_SETUP", configured: ready }]));
+  return Response.json({ capabilities, providers: configured, providerStatus, ttsPolicies: policies, recentTtsMetrics: getRecentTtsMetrics(), tools: TOOLS.map((tool) => ({ name: tool.name, skillKey: tool.skillKey, requiresConfirmation: Boolean(tool.requiresConfirmation) })) });
 }

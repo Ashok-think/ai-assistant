@@ -20,6 +20,7 @@ type Settings = {
   customKey: string; customBaseUrl: string | null; customModel: string | null;
   permissions: Record<string, boolean>;
   envKeys: Record<string, boolean>;
+  ttsPolicies: Record<string, { enabled: boolean; priority: number; timeoutMs: number; streaming: boolean }>;
 };
 type ProviderHealth = { checkedAt: string; anyConfigured: boolean; results: { provider: string; tier: string; model: string; ok: boolean; status: number | string; latencyMs: number; detail?: string }[] };
 type Usage = {
@@ -315,6 +316,21 @@ export default function SettingsPage() {
             </div>
           </div>
           {voiceTest && <p className="mt-2 text-xs text-cyan-200">{voiceTest}</p>}
+          <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Provider routing controls</div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {(["openrouter-fish", "gemini", "elevenlabs", "custom"] as const).map((provider) => {
+                const policy = s.ttsPolicies?.[provider] ?? { enabled: true, priority: 1, timeoutMs: 12000, streaming: false };
+                const updatePolicy = (patchPolicy: Partial<typeof policy>) => patch({ ttsPolicies: { ...(s.ttsPolicies ?? {}), [provider]: { ...policy, ...patchPolicy } } });
+                return <div key={provider} className="rounded-lg border border-white/10 p-2">
+                  <div className="flex items-center justify-between gap-2"><span className="text-xs text-slate-200">{provider === "openrouter-fish" ? "Fish Audio" : provider === "elevenlabs" ? "ElevenLabs" : provider === "gemini" ? "Gemini TTS" : "Custom / future"}</span><button type="button" className={`chip ${policy.enabled ? "text-emerald-300" : "text-slate-500"}`} onClick={() => updatePolicy({ enabled: !policy.enabled })}>{policy.enabled ? "enabled" : "disabled"}</button></div>
+                  <div className="mt-2 grid grid-cols-2 gap-2"><label className="text-[10px] text-slate-500">Priority<input aria-label={`${provider} priority`} className="input mt-1 !py-1 text-xs" type="number" min="1" max="99" value={policy.priority} onChange={(e) => updatePolicy({ priority: Number(e.target.value) })} onBlur={() => patch({ ttsPolicies: { ...(s.ttsPolicies ?? {}), [provider]: policy } })} /></label><label className="text-[10px] text-slate-500">Timeout ms<input aria-label={`${provider} timeout`} className="input mt-1 !py-1 text-xs" type="number" min="1000" max="60000" step="500" value={policy.timeoutMs} onChange={(e) => updatePolicy({ timeoutMs: Number(e.target.value) })} onBlur={() => patch({ ttsPolicies: { ...(s.ttsPolicies ?? {}), [provider]: policy } })} /></label></div>
+                  <label className="mt-2 flex items-center gap-2 text-[10px] text-slate-500"><input type="checkbox" checked={policy.streaming} onChange={(e) => updatePolicy({ streaming: e.target.checked })} /> streaming preference</label>
+                </div>;
+              })}
+            </div>
+            <p className="mt-2 text-[10px] text-slate-500">Routing still reports measured first-audio and total latency. A provider is not considered ready until its credential is configured and a real request succeeds.</p>
+          </div>
 
           {/* ElevenLabs real diagnostic — no silent fallbacks, honest states. */}
           <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
