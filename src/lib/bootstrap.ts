@@ -192,7 +192,7 @@ async function migrate() {
     ["aihub_key", "TEXT"], ["aihub_base_url", "TEXT"], ["aihub_model", "TEXT"],
     ["custom_key", "TEXT"], ["custom_base_url", "TEXT"], ["custom_model", "TEXT"],
     // Voice and model selection preferences
-    ["tts_provider", "TEXT NOT NULL DEFAULT 'auto'"], ["tts_model", "TEXT NOT NULL DEFAULT 'fish-audio/s2.1-pro'"], ["tts_voice", "TEXT NOT NULL DEFAULT 'default'"],
+    ["tts_provider", "TEXT NOT NULL DEFAULT 'auto'"], ["tts_model", "TEXT NOT NULL DEFAULT 'fish-audio/s2.1-pro'"], ["tts_voice", "TEXT NOT NULL DEFAULT 'default'"], ["tts_policies", "TEXT NOT NULL DEFAULT '{}'"],
     ["chat_model_mode", "TEXT NOT NULL DEFAULT 'auto'"], ["chat_provider", "TEXT"], ["chat_model", "TEXT"], ["thinking_model_mode", "TEXT NOT NULL DEFAULT 'auto'"], ["thinking_provider", "TEXT"], ["thinking_model", "TEXT"],
     // Master character voice (one locked identity + emotion-as-delivery)
     ["master_voice_enabled", "INTEGER NOT NULL DEFAULT 1"],

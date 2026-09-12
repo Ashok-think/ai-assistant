@@ -89,9 +89,12 @@ export async function POST(req: Request) {
   else if (pref === "openrouter-fish" || pref === "fish-audio") order = ["openrouter-fish", "gemini", "elevenlabs"];
   else order = ["openrouter-fish", "gemini", "elevenlabs"];
   const configured = orderTtsProviders(policies, body.provider ?? (pref === "auto" ? undefined : pref === "fish-audio" ? "openrouter-fish" : pref)) as TtsProvider[];
-  order = configured.filter((provider) => order.includes(provider)).sort((a, b) => (policies[a].priority + adaptivePenalty(a) / 10000) - (policies[b].priority + adaptivePenalty(b) / 10000)) as typeof order;
+  order = configured.filter((provider): provider is "gemini" | "elevenlabs" | "openrouter-fish" => order.includes(provider as typeof order[number])).sort((a, b) => (policies[a].priority + adaptivePenalty(a) / 10000) - (policies[b].priority + adaptivePenalty(b) / 10000));
 
   for (const provider of order) {
+    const providerStartedAt = Date.now();
+    const timeoutMs = policies[provider]?.timeoutMs ?? 12000;
+    const recordFailure = (status: string | number) => recordTtsMetric({ provider, ok: false, timeToFirstAudioMs: null, totalAudioLatencyMs: Date.now() - providerStartedAt, bytes: 0, error: String(status), measuredAt: new Date().toISOString() });
     // ---- OpenRouter Fish Audio (OpenAI-compatible speech endpoint) ----
     if (provider === "openrouter-fish") {
       const key = process.env.OPENROUTER_API_KEY?.trim() || st.openrouterKey?.trim();
@@ -103,13 +106,14 @@ export async function POST(req: Request) {
           method: "POST",
           headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "HTTP-Referer": new URL(req.url).origin, "X-Title": "JARVISH" },
           body: JSON.stringify({ model, input: clean, ...(voice && voice !== "default" ? { voice } : {}), response_format: "mp3" }),
-          signal: AbortSignal.timeout(12000),
+          signal: AbortSignal.timeout(timeoutMs),
         });
         if (!r.ok) { attempts.push({ provider, status: r.status }); continue; }
         const bytes = new Uint8Array(await r.arrayBuffer());
         if (!bytes.byteLength) { attempts.push({ provider, status: "empty" }); continue; }
         attempts.push({ provider, status: 200 });
-        return audioResponse(toArrayBuffer(bytes), "audio/mpeg", provider, `${model}:${voice}`, emotion, attempts);
+        recordTtsMetric({ provider, ok: true, timeToFirstAudioMs: Date.now() - providerStartedAt, totalAudioLatencyMs: Date.now() - startedAt, bytes: bytes.byteLength, measuredAt: new Date().toISOString() });
+        return audioResponse(toArrayBuffer(bytes), "audio/mpeg", provider, `${model}:${voice}`, emotion, attempts, Date.now() - providerStartedAt);
       } catch (e) { attempts.push({ provider, status: `error: ${(e as Error).message}` }); continue; }
     }
 
@@ -139,7 +143,7 @@ export async function POST(req: Request) {
                 speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
               },
             }),
-            signal: AbortSignal.timeout(12000),
+            signal: AbortSignal.timeout(timeoutMs),
           },
         );
         if (!r.ok) {
@@ -161,7 +165,8 @@ export async function POST(req: Request) {
           : new Uint8Array(raw);
         const mime = isPcmMime(audio.mimeType) ? "audio/wav" : audio.mimeType || "audio/mpeg";
         attempts.push({ provider, status: 200 });
-        return audioResponse(toArrayBuffer(bytes), mime, provider, voice, emotion, attempts);
+        recordTtsMetric({ provider, ok: true, timeToFirstAudioMs: Date.now() - providerStartedAt, totalAudioLatencyMs: Date.now() - startedAt, bytes: bytes.byteLength, measuredAt: new Date().toISOString() });
+        return audioResponse(toArrayBuffer(bytes), mime, provider, voice, emotion, attempts, Date.now() - providerStartedAt);
       } catch (e) {
         attempts.push({ provider, status: `error: ${(e as Error).message}` });
         continue;
@@ -193,14 +198,15 @@ export async function POST(req: Request) {
             use_speaker_boost: true,
           },
         }),
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       if (!r.ok) {
         attempts.push({ provider, status: r.status });
         continue;
       }
       attempts.push({ provider, status: 200 });
-      return audioResponse(r.body, "audio/mpeg", provider, vid, emotion, attempts);
+      recordTtsMetric({ provider, ok: true, timeToFirstAudioMs: Date.now() - providerStartedAt, totalAudioLatencyMs: Date.now() - startedAt, bytes: Number(r.headers.get("content-length") ?? 0), measuredAt: new Date().toISOString() });
+      return audioResponse(r.body, "audio/mpeg", provider, vid, emotion, attempts, Date.now() - providerStartedAt);
     } catch (e) {
       attempts.push({ provider, status: `error: ${(e as Error).message}` });
     }
@@ -254,6 +260,7 @@ function audioResponse(
   voice: string,
   emotion: Emotion,
   attempts: Attempt[],
+  timeToFirstAudioMs: number,
 ) {
   return new Response(payload, {
     headers: {
@@ -261,6 +268,7 @@ function audioResponse(
       "Cache-Control": "no-store",
       "X-TTS-Provider": provider,
       "X-TTS-Voice": voice,
+      "X-TTS-Time-To-First-Audio-Ms": String(timeToFirstAudioMs),
       "X-TTS-Emotion": emotion,
       "X-TTS-Attempts": JSON.stringify(attempts),
     },

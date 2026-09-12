@@ -18,7 +18,7 @@ export type TtsMetric = {
 };
 
 const DEFAULTS: Record<TtsProvider, TtsProviderPolicy> = {
-  openrouter-fish: { enabled: true, priority: 1, timeoutMs: 12000, streaming: false },
+  "openrouter-fish": { enabled: true, priority: 1, timeoutMs: 12000, streaming: false },
   gemini: { enabled: true, priority: 2, timeoutMs: 12000, streaming: false },
   elevenlabs: { enabled: true, priority: 3, timeoutMs: 12000, streaming: true },
   custom: { enabled: true, priority: 4, timeoutMs: 12000, streaming: false },
@@ -36,9 +36,10 @@ export function getTtsPolicies(value?: unknown): Record<TtsProvider, TtsProvider
 }
 
 export function orderTtsProviders(policies: Record<TtsProvider, TtsProviderPolicy>, preferred?: string): TtsProvider[] {
-  const providers = Object.keys(policies) as TtsProvider[];
-  return providers.filter((provider) => policies[provider].enabled && (preferred === "auto" || !preferred || preferred === provider))
-    .sort((a, b) => policies[a].priority - policies[b].priority);
+  const providers = (Object.keys(policies) as TtsProvider[]).filter((provider) => policies[provider].enabled);
+  const ranked = providers.sort((a, b) => policies[a].priority - policies[b].priority);
+  if (!preferred || preferred === "auto") return ranked;
+  return [preferred as TtsProvider, ...ranked.filter((provider) => provider !== preferred)];
 }
 
 export function recordTtsMetric(metric: TtsMetric) {
