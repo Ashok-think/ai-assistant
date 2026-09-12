@@ -84,7 +84,7 @@ function buildRequest(opts: {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   // Gemini's OpenAI-compatible endpoint uses Bearer auth
   if (opts.apiKey) headers.Authorization = `Bearer ${opts.apiKey}`;
-  if (opts.spec.provider === "openrouter") {
+  if (opts.spec.provider === "openrouter" || opts.spec.provider === "tokenrouter") {
     headers["HTTP-Referer"] = "https://jarvish-ai.local";
     headers["X-Title"] = "Jarvish AI Agent";
   }

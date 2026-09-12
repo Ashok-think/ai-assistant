@@ -10,6 +10,7 @@ type ProbeResult = {
   ok: boolean;
   status: number | string;
   latencyMs: number;
+  detail?: string;
 };
 
 /**
@@ -36,11 +37,14 @@ export async function GET() {
         const r = await fetch(`${c.spec.baseUrl}/models`, { signal: AbortSignal.timeout(8000) });
         return res(c, r.ok, r.status, started);
       }
-      const r = await fetch(`${c.spec.baseUrl}/models`, {
-        headers: c.key ? { Authorization: `Bearer ${c.key}` } : {},
-        signal: AbortSignal.timeout(12000),
-      });
-      return res(c, r.ok, r.status, started);
+      const headers: Record<string, string> = c.key ? { Authorization: `Bearer ${c.key}` } : {};
+      if (c.spec.provider === "openrouter" || c.spec.provider === "tokenrouter") {
+        headers["HTTP-Referer"] = "https://jarvish-ai.local";
+        headers["X-Title"] = "Jarvish AI Agent";
+      }
+      const r = await fetch(`${c.spec.baseUrl}/models`, { headers, signal: AbortSignal.timeout(12000) });
+      const detail = r.ok ? undefined : (await r.text()).slice(0, 180);
+      return res(c, r.ok, r.status, started, detail);
     } catch (e) {
       return res(c, false, (e as Error).name === "TimeoutError" ? "timeout" : "error", started);
     }
@@ -97,6 +101,7 @@ function res(
   ok: boolean,
   status: number | string,
   started: number,
+  detail?: string,
 ): ProbeResult {
-  return { provider: c.spec.provider, tier: c.tier, model: c.spec.model, ok, status, latencyMs: Date.now() - started };
+  return { provider: c.spec.provider, tier: c.tier, model: c.spec.model, ok, status, latencyMs: Date.now() - started, ...(detail ? { detail } : {}) };
 }

@@ -26,6 +26,7 @@ type Character = {
 type Settings = {
   assistantName: string; wakeWord: string; userName: string; language: string; activeCharacterId: number | null;
   voiceEnabled: boolean; wakeWordEnabled: boolean; freeOnlyMode: boolean; lowPowerMode: boolean; routerMode: string; dailyBudgetUsd: number;
+  ttsProvider: string; ttsModel: string; ttsVoice: string; voiceSpeed?: number; chatModelMode: string; chatProvider: string | null; chatModel: string | null; thinkingModelMode: string; thinkingProvider: string | null; thinkingModel: string | null;
   renderMode?: string; lipSyncEnabled?: boolean;
 };
 type State = {
@@ -39,6 +40,7 @@ type Msg = {
   costUsd?: number; tokensIn?: number; tokensOut?: number; toolCalls?: ToolLog[]; characterName?: string; pending?: boolean;
 };
 type RouteInfo = { tier: string; provider: string; model: string; reason: string; complexity: number; estimatedInputTokens: number; budgetUsedUsd: number; budgetUsd: number };
+type ModelOption = { id: string; provider: string; model: string; tier: string; capability: string; configured: boolean; label: string };
 
 
 
@@ -51,6 +53,8 @@ const QUICK = [
 
 export default function Home() {
   const [state, setState] = useState<State | null>(null);
+  const [models, setModels] = useState<{ thinking: ModelOption[]; chat: ModelOption[]; audio: ModelOption[] }>({ thinking: [], chat: [], audio: [] });
+  const [showModelPicker, setShowModelPicker] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -63,6 +67,7 @@ export default function Home() {
   const [agentStep, setAgentStep] = useState<AgentStep | null>(null);
   const [agentTool, setAgentTool] = useState<string | null>(null);
   const [agentLog, setAgentLog] = useState<AgentLogEntry[]>([]);
+  const [activityOpen, setActivityOpen] = useState(false);
 
   const [route, setRoute] = useState<RouteInfo | null>(null);
   const [toasts, setToasts] = useState<{ id: string; text: string }[]>([]);
@@ -101,6 +106,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    fetch("/api/models").then((r) => r.json()).then((j) => setModels(j.slots ?? { thinking: [], chat: [], audio: [] })).catch(() => undefined);
     load().then((j) => {
       setMsgs([{ id: "greet", role: "assistant", content: j.greeting, emotion: j.character.defaultMood as AvatarEmotion, characterName: j.character.name }]);
     });
@@ -119,9 +125,15 @@ export default function Home() {
     fetch("/api/android/status").then((r) => r.json()).then(setAndroidStatus).catch(() => setAndroidStatus(null));
   }, [debug]);
 
+  const toastTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const pushToast = useCallback((id: string, text: string) => {
-    setToasts((t) => [...t, { id, text }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 12000);
+    const timer = toastTimersRef.current.get(id);
+    if (timer) clearTimeout(timer);
+    setToasts((current) => [...current.filter((item) => item.id !== id), { id, text }].slice(-3));
+    toastTimersRef.current.set(id, setTimeout(() => {
+      setToasts((current) => current.filter((item) => item.id !== id));
+      toastTimersRef.current.delete(id);
+    }, 5200));
   }, []);
 
   // `send` and `runAction` call each other (a screen reading feeds a follow-up turn), so the
@@ -140,9 +152,9 @@ export default function Home() {
     async (id: string, action: ClientAction) => {
       setActions((prev) => [...prev.slice(-7), { id, action, status: "running", detail: "", at: Date.now() }]);
       const r = await performAction(action, { confirm: askConfirm });
-      setActions((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, status: r.ok ? "done" : r.needsTap ? "pending" : "failed", detail: r.detail } : a)),
-      );
+      const nextStatus = r.ok ? "done" : r.needsTap ? "pending" : "failed";
+      setActions((prev) => prev.map((a) => (a.id === id ? { ...a, status: nextStatus, detail: r.detail } : a)));
+      if (r.ok) setTimeout(() => setActions((prev) => prev.filter((a) => a.id !== id)), 5000);
       // A screen reading is only useful once the assistant has spoken about it, so hand the
       // description straight back for one more turn. Depth-capped so it can't loop.
       if (action.kind === "capture_screen" && r.ok && followUpDepth.current === 0) {
@@ -165,6 +177,7 @@ export default function Home() {
     // This runs from a real click, so the popup blocker lets it through.
     const r = await performAction(a.action, { userInitiated: true });
     setActions((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: r.ok ? "done" : "failed", detail: r.detail } : x)));
+    if (r.ok) setTimeout(() => setActions((prev) => prev.filter((x) => x.id !== a.id)), 5000);
   }, []);
 
   // Proactive engine poll
@@ -179,7 +192,7 @@ export default function Home() {
           pushToast(it.id, it.text);
           if (it.speak && voiceOn && stateRef.current) {
             setEmotion("excited");
-            speak(it.text, { voice: stateRef.current.character.voice, emotion: "excited", lang: stateRef.current.settings.language, onStart: () => setTalking(true), onEnd: () => setTalking(false), onMouth: setMouth });
+            speak(it.text, { voice: { ...stateRef.current.character.voice, rate: (stateRef.current.character.voice.rate ?? 1) * (stateRef.current.settings.voiceSpeed ?? 1), localVoiceName: typeof window !== "undefined" ? window.localStorage.getItem("jarvish-local-voice") ?? undefined : undefined }, emotion: "excited", lang: stateRef.current.settings.language, onStart: () => setTalking(true), onEnd: () => setTalking(false), onMouth: setMouth });
           }
         }
       } catch {
@@ -202,7 +215,7 @@ export default function Home() {
       // handler to treat input as a barge-in (and it ignores very short/echo-like fragments).
       speakingRef.current = true;
       await speak(text, {
-        voice: s.character.voice, emotion: emo, lang: s.settings.language,
+        voice: { ...s.character.voice, rate: (s.character.voice.rate ?? 1) * (s.settings.voiceSpeed ?? 1), localVoiceName: typeof window !== "undefined" ? window.localStorage.getItem("jarvish-local-voice") ?? undefined : undefined, ttsProvider: s.settings.ttsProvider, ttsModel: s.settings.ttsModel, ttsVoice: s.settings.ttsVoice }, emotion: emo, lang: s.settings.language,
         onStart: () => { setTalking(true); if (reqStart) setLatency((l) => ({ ...(l ?? {}), firstAudio: Math.round(performance.now() - reqStart) })); },
         onEnd: () => setTalking(false), onMouth: setMouth,
         onProvider: (p) => { setLastTtsProvider(p); if (p !== "browser") setTtsFallbackReason(""); },
@@ -215,6 +228,19 @@ export default function Home() {
     },
     [voiceOn],
   );
+
+  const setModelSlot = useCallback(async (slot: "thinking" | "chat" | "audio", value: string) => {
+    if (!stateRef.current) return;
+    const selected = (models[slot] ?? []).find((m) => m.id === value);
+    if (!selected) return;
+    const patch = slot === "thinking"
+      ? { thinkingModelMode: "selected", thinkingProvider: selected.provider, thinkingModel: selected.model }
+      : slot === "chat"
+        ? { chatModelMode: "selected", chatProvider: selected.provider, chatModel: selected.model }
+        : { ttsProvider: "openrouter-fish", ttsModel: selected.model };
+    await fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+    setState((current) => current ? { ...current, settings: { ...current.settings, ...patch } } : current);
+  }, [models]);
 
   const switchCharacter = useCallback(
     async (c: Character, announce = true) => {
@@ -262,7 +288,7 @@ export default function Home() {
         r.onerror = () => rej(new Error("read failed"));
         r.readAsDataURL(file);
       });
-      setMsgs((m) => [...m, { id: `u-${Date.now()}`, role: "user", content: `🖼️ ${file.name} — ${question}` }]);
+      setMsgs((m) => [...m, { id: `u-${Date.now()}`, role: "user", content: `🖼️ ${file.name} ��� ${question}` }]);
       const pendingId = `img-${Date.now()}`;
       setMsgs((m) => [...m, { id: pendingId, role: "assistant", content: "", pending: true }]);
       setBusy(true);
@@ -385,7 +411,7 @@ export default function Home() {
       speechEndRef.current = 0; // consume it
       setLatency({ sttFinal });
       try {
-        const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: t, conversationId: convRef.current }), signal: ctl.signal });
+        const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: t, conversationId: convRef.current, selectedProvider: stateRef.current?.settings.thinkingModelMode === "selected" ? stateRef.current.settings.thinkingProvider : null, selectedModel: stateRef.current?.settings.thinkingModelMode === "selected" ? stateRef.current.settings.thinkingModel : null }), signal: ctl.signal });
         if (!res.ok || !res.body) throw new Error(`Chat is unavailable (${res.status}). Please try again.`);
         const reader = res.body.getReader();
         const dec = new TextDecoder();
@@ -417,7 +443,7 @@ export default function Home() {
             } else if (ev.type === "quota") {
               // Precise provider limit message (not a generic "failed").
               setProviderLimit(ev.message);
-              pushToast(`quota-${Date.now()}`, ev.message);
+              pushToast("quota", ev.message);
             } else if (ev.type === "action_step") {
               // Real agent step from the orchestrator — drives the character state machine + log.
               setAgentStep(ev.status as AgentStep);
@@ -483,7 +509,7 @@ export default function Home() {
   sendRef.current = send;
 
   const { voice, micLevel, tone, startListening, stopListening } = useVoiceSession({
-    phrase: state?.settings.wakeWord || "hey rio",
+    phrase: state?.settings.wakeWord || "nova",
     language: state?.settings.language || "auto",
     onCommand: (command) => {
       speechEndRef.current = performance.now();
@@ -598,7 +624,7 @@ export default function Home() {
               : <>Enable Wake, then say <span className="text-primary">“{state.settings.wakeWord}”</span>. Your microphone stays off until enabled.</>}
           </p>
 
-          <VoiceDiagnostics voice={voice} phrase={state.settings.wakeWord || "hey rio"} language={state.settings.language} stop={stopListening} retry={() => startListening("wake")} pushToTalk={() => startListening("once")} />
+          <VoiceDiagnostics voice={voice} phrase={state.settings.wakeWord || "nova"} language={state.settings.language} stop={stopListening} retry={() => startListening("wake")} pushToTalk={() => startListening("once")} />
           <details className="engine-details"><summary>Under the hood <SlidersHorizontal size={14} /></summary>
           {/* Router HUD */}
           <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-3">
@@ -682,9 +708,21 @@ export default function Home() {
 
       {/* RIGHT: Chat */}
       <section className="panel conversation-panel">
-        <div className="conversation-header">
+        <div className="conversation-header relative">
           <div className="flex items-center gap-2"><span className="status-dot" /><span className="text-sm font-medium">Conversation</span><span className="text-sm text-muted-foreground">/ {c.name}</span></div>
-          <button className="text-xs text-slate-400 hover:text-white" onClick={() => { convRef.current = null; window.localStorage.removeItem("convId"); setMsgs([{ id: "greet", role: "assistant", content: state.greeting, emotion: c.defaultMood as AvatarEmotion, characterName: c.name }]); }}><Plus size={15} className="inline" /> New</button>
+          <div className="flex items-center gap-3">
+            <button className="text-xs text-slate-400 hover:text-white" onClick={() => setShowModelPicker((open) => !open)}><SlidersHorizontal size={14} className="mr-1 inline" />Models</button>
+            <button className="text-xs text-slate-400 hover:text-white" onClick={() => { convRef.current = null; window.localStorage.removeItem("convId"); setMsgs([{ id: "greet", role: "assistant", content: state.greeting, emotion: c.defaultMood as AvatarEmotion, characterName: c.name }]); }}><Plus size={15} className="inline" /> New</button>
+          </div>
+          {showModelPicker && <div className="absolute right-3 top-12 z-20 w-[min(23rem,calc(100vw-2rem))] rounded-2xl border border-white/10 bg-slate-950/95 p-3 shadow-2xl backdrop-blur">
+            <div className="mb-2 text-[10px] uppercase tracking-widest text-slate-500">Active model slots</div>
+            {(["thinking", "chat", "audio"] as const).map((slot) => {
+              const options = models[slot];
+              const current = slot === "thinking" ? `${state.settings.thinkingProvider ?? ""}/${state.settings.thinkingModel ?? ""}` : slot === "chat" ? `${state.settings.chatProvider ?? ""}/${state.settings.chatModel ?? ""}` : `${state.settings.ttsProvider === "openrouter-fish" ? "openrouter" : state.settings.ttsProvider}/${state.settings.ttsModel}`;
+              return <label key={slot} className="mb-2 block text-xs text-slate-300"><span className="mb-1 block capitalize">{slot} {slot === "audio" ? "(Fish Audio stays here)" : ""}</span><select className="input !py-1.5 text-xs" value={current} onChange={(e) => setModelSlot(slot, e.target.value)}><option value={current}>{current === "/" || current.endsWith("/") ? "Auto routing" : current}</option>{options.filter((m) => m.configured).map((m) => <option key={m.id} value={m.id}>{m.label} · {m.tier}</option>)}</select></label>;
+            })}
+            <p className="mt-1 text-[10px] text-slate-500">Thinking and chat only show text-capable models. Audio models never answer messages.</p>
+          </div>}
         </div>
 
         <div ref={listRef} className="conversation-messages" role="log" aria-label="Conversation messages" aria-live="polite">
@@ -729,23 +767,20 @@ export default function Home() {
         </div>
 
         {agentLog.length > 0 && (
-          <div className="mt-3 rounded-2xl border border-violet-400/20 bg-violet-400/[0.04] p-2.5">
-            <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-violet-300/80">
-              <span>Agent activity</span>
+          <details className="mt-3 rounded-2xl border border-violet-400/20 bg-violet-400/[0.04]" open={activityOpen} onToggle={(event) => setActivityOpen(event.currentTarget.open)}>
+            <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 text-[10px] uppercase tracking-[0.2em] text-violet-300/80 [&::-webkit-details-marker]:hidden">
+              <span className="flex items-center gap-2"><ChevronDown size={13} className={`transition-transform ${activityOpen ? "rotate-180" : ""}`} /> Agent activity</span>
               <span className="text-slate-500">{agentLog.filter((a) => a.status === "done").length}/{agentLog.length}</span>
-            </div>
-            <ul className="space-y-1">
+            </summary>
+            <ul className="space-y-1 border-t border-violet-400/10 px-3 py-2.5">
               {agentLog.map((a) => (
                 <li key={a.id} className="anim-fade-up flex items-start gap-2 text-xs">
                   <span className={`mt-0.5 ${a.status === "failed" ? "text-rose-300" : a.status === "running" ? "text-cyan-300 animate-pulse" : "text-emerald-300"}`}>{a.icon}</span>
-                  <div className="min-w-0 flex-1">
-                    <span className="font-mono text-[11px] text-slate-200">{a.text}</span>
-                    {a.detail && <p className={`break-words ${a.status === "failed" ? "text-rose-300/80" : "text-slate-400"}`}>{a.detail}</p>}
-                  </div>
+                  <div className="min-w-0 flex-1"><span className="font-mono text-[11px] text-slate-200">{a.text}</span>{a.detail && <p className={`break-words ${a.status === "failed" ? "text-rose-300/80" : "text-slate-400"}`}>{a.detail}</p>}</div>
                 </li>
               ))}
             </ul>
-          </div>
+          </details>
         )}
 
         <ActionTimeline actions={actions} onRetry={retryAction} onDismiss={(id) => setActions((a) => a.filter((x) => x.id !== id))} />
@@ -773,7 +808,7 @@ export default function Home() {
       </section>
 
       {/* Toasts (proactive notifications) */}
-      <div className="pointer-events-none fixed right-4 top-4 z-50 flex w-80 flex-col gap-2">
+      <div aria-live="polite" className="pointer-events-none fixed right-3 top-3 z-50 flex max-h-[30vh] w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-1.5 overflow-hidden">
         {toasts.map((t) => (
           <div key={t.id} className="panel anim-fade-up pointer-events-auto flex items-start gap-2 p-3 text-sm">
             <span className="text-lg">{c.emoji}</span>

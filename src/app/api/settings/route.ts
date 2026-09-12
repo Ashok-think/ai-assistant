@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 const ALLOWED = new Set([
   "assistantName", "wakeWord", "userName", "language", "activeCharacterId", "freeOnlyMode", "safeMode", "lowPowerMode",
   "voiceEnabled", "wakeWordEnabled", "proactiveEnabled", "dailyBudgetUsd", "routerMode", "openaiKey", "groqKey",
-  "openrouterKey", "geminiKey", "elevenLabsKey", "ollamaUrl", "permissions", "ttsProvider",
+  "openrouterKey", "geminiKey", "elevenLabsKey", "ollamaUrl", "permissions", "ttsProvider", "ttsModel", "ttsVoice", "chatModelMode", "chatProvider", "chatModel", "thinkingModelMode", "thinkingProvider", "thinkingModel",
   "masterVoiceEnabled", "masterGeminiVoice", "masterElevenVoiceId", "voiceSpeed", "emotionIntensity",
   "customVoiceStatus", "renderMode", "lipSyncEnabled",
   "tokenrouterKey", "tokenrouterBaseUrl", "tokenrouterModel",

@@ -25,6 +25,15 @@ async function ensureTables() {
       proactive_enabled INTEGER NOT NULL DEFAULT 1,
       daily_budget_usd REAL NOT NULL DEFAULT 1.0,
       router_mode TEXT NOT NULL DEFAULT 'auto',
+      tts_provider TEXT NOT NULL DEFAULT 'auto',
+      tts_model TEXT NOT NULL DEFAULT 'fish-audio/s2.1-pro',
+      tts_voice TEXT NOT NULL DEFAULT 'default',
+      chat_model_mode TEXT NOT NULL DEFAULT 'auto',
+      chat_provider TEXT,
+      chat_model TEXT,
+      thinking_model_mode TEXT NOT NULL DEFAULT 'auto',
+      thinking_provider TEXT,
+      thinking_model TEXT,
       openai_key TEXT,
       groq_key TEXT,
       openrouter_key TEXT,
@@ -181,8 +190,9 @@ async function migrate() {
     ["qwen_key", "TEXT"], ["qwen_base_url", "TEXT"], ["qwen_model", "TEXT"],
     ["aihub_key", "TEXT"], ["aihub_base_url", "TEXT"], ["aihub_model", "TEXT"],
     ["custom_key", "TEXT"], ["custom_base_url", "TEXT"], ["custom_model", "TEXT"],
-    // Voice engine preference (task 4)
-    ["tts_provider", "TEXT NOT NULL DEFAULT 'auto'"],
+    // Voice and model selection preferences
+    ["tts_provider", "TEXT NOT NULL DEFAULT 'auto'"], ["tts_model", "TEXT NOT NULL DEFAULT 'fish-audio/s2.1-pro'"], ["tts_voice", "TEXT NOT NULL DEFAULT 'default'"],
+    ["chat_model_mode", "TEXT NOT NULL DEFAULT 'auto'"], ["chat_provider", "TEXT"], ["chat_model", "TEXT"], ["thinking_model_mode", "TEXT NOT NULL DEFAULT 'auto'"], ["thinking_provider", "TEXT"], ["thinking_model", "TEXT"],
     // Master character voice (one locked identity + emotion-as-delivery)
     ["master_voice_enabled", "INTEGER NOT NULL DEFAULT 1"],
     ["master_gemini_voice", "TEXT NOT NULL DEFAULT 'Leda'"],
@@ -210,9 +220,14 @@ async function migrate() {
   } catch {
     /* column may not exist on very old DBs; ensureTables/migrate handles that */
   }
-  // Default wake word is "hey rio" (the character is Rio). Migrate the old default only.
   try {
-    await client.execute("UPDATE settings SET wake_word='hey rio' WHERE wake_word='hey nova' OR wake_word IS NULL OR wake_word=''");
+    await client.execute("UPDATE settings SET tts_model='fish-audio/s2.1-pro' WHERE tts_model='fish-audio/s2.1-pro:free' OR tts_model='fish-audio/s2.1-pro-free:free' OR tts_model IS NULL OR tts_model=''");
+  } catch {
+    /* ignore */
+  }
+  // Nova is accepted by the matcher; only fill missing values so existing custom phrases stay intact.
+  try {
+    await client.execute("UPDATE settings SET wake_word='nova' WHERE wake_word IS NULL OR wake_word=''");
   } catch {
     /* ignore */
   }

@@ -16,8 +16,19 @@ export const normalizeHeard = (text: string) => text.toLowerCase().replace(/[^\p
 
 export function matchesWake(heard: string, phrase: string): { hit: boolean; rest: string } {
   const tokens = [...heard.matchAll(/[\p{L}\p{N}]+/gu)];
-  const wake = normalizeHeard(phrase) || "hey rio";
-  const variants = wake === "hey rio" ? ["hey rio", "hey reo", "hey ryo"] : [wake];
+  const wake = normalizeHeard(phrase) || "nova";
+  const configuredVariants = [wake, wake.replace(/^hey\s+/u, "okay "), wake.replace(/^hey\s+/u, "ok ")];
+  const variants = Array.from(new Set([
+    ...configuredVariants,
+    "nova",
+    "hey nova",
+    "okay nova",
+    "ok nova",
+    "hey rio",
+    "hey reo",
+    "hey ryo",
+    "hey jarvis",
+  ]));
   for (let i = 0; i < tokens.length; i++) {
     for (const variant of variants) {
       const words = variant.split(" ");
@@ -68,7 +79,7 @@ export class VoiceSession {
   private silence: ReturnType<typeof setTimeout> | null = null;
   private retries = 0;
   private awakeUntil = 0;
-  private settings = { mode: "once" as VoiceMode, phrase: "hey rio", language: "en-IN" };
+  private settings = { mode: "once" as VoiceMode, phrase: "nova", language: "en-IN" };
 
   constructor(options: VoiceOptions) { this.options = options; }
   private now() { return (this.options.now ?? Date.now)(); }
@@ -135,6 +146,7 @@ export class VoiceSession {
     let interrupted = false;
     let hadResults = false;
     let lastResult = "";
+    let lastTranscript = "";
     let failure = "";
     const capturing = () => mode !== "wake" || this.awakeUntil > this.now();
     const command = (text: string) => {
@@ -163,6 +175,7 @@ export class VoiceSession {
       lastResult = fingerprint;
       hadResults ||= Boolean(result.final);
       const heard = [result.final, result.interim].filter(Boolean).join(" ");
+      lastTranscript = result.final || result.interim || lastTranscript;
       this.update({ heard });
       const remaining = result.final.startsWith(consumed) ? result.final.slice(consumed.length).trim() : result.final;
       const wake = matchesWake(remaining, phrase);
@@ -172,7 +185,6 @@ export class VoiceSession {
       if ((wake.hit || stop) && !interrupted) { interrupted = true; this.options.onInterrupt(); }
       if (!current()) return;
       if (stop) { this.awakeUntil = this.now() + 1000; final = "stop"; submit(); return; }
-      final = remaining;
       if (mode === "wake" && wake.hit && !this.awakeUntil) {
         this.awakeUntil = this.now() + 8000;
         this.later(() => {
@@ -187,6 +199,14 @@ export class VoiceSession {
           }
         }, 8000);
       }
+      // Saying only the wake word arms the next utterance; do not submit an empty command.
+      if (mode === "wake" && wake.hit && !wake.rest) {
+        final = "";
+        this.update({ phase: "capturing", command: "Listening for your request…" });
+        this.clear(this.silence);
+        return;
+      }
+      final = remaining;
       const shown = command(final);
       this.update({ phase: capturing() ? "capturing" : "wake-listening", command: capturing() ? [shown, result.interim].filter(Boolean).join(" ") : "" });
       this.clear(this.silence);
@@ -195,19 +215,29 @@ export class VoiceSession {
     rec.onerror = (event) => {
       if (!current()) return;
       failure = event.error;
-      if (!["network", "no-speech", "aborted"].includes(failure)) { this.fail(failure); return; }
+      if (!["network", "no-speech", "aborted", "audio-capture", "service-not-allowed"].includes(failure)) { this.fail(failure); return; }
       this.clear(this.silence);
       this.update({ phase: "restarting", error: failure === "network" ? voiceError(failure) : "" });
-      this.later(() => { if (current()) rec.onend?.(); }, 1000);
+      this.later(() => { if (current()) rec.onend?.(); }, mode === "wake" ? 450 : 1000);
     };
     rec.onend = () => {
       if (!current()) return;
       this.clear(this.silence);
+      // Chrome can end with only an interim transcript. Promote it so wake commands
+      // like “Nova, open YouTube” are not discarded before the recognizer restarts.
+      if (!final && lastTranscript) final = lastTranscript;
       if (!failure) submit();
       if (!current()) return;
       this.detach();
       if (mode === "once") { if (failure === "network") this.fail(failure); else this.stop("idle"); return; }
       this.retries = hadResults && !failure ? 0 : this.retries + 1;
+      // Wake mode is intentionally long-lived. Chrome ends recognition after silence or
+      // service hiccups; never turn that normal lifecycle event into a permanent failure.
+      if (mode === "wake") {
+        this.update({ phase: "restarting", command: "", error: failure === "network" ? voiceError(failure) : "" });
+        this.later(() => this.open(), Math.min(350 * 2 ** Math.min(this.retries, 4), 4000));
+        return;
+      }
       if (this.retries > 4) { this.fail(failure || "repeated-session-end"); return; }
       this.update({ phase: "restarting", command: "" });
       this.later(() => this.open(), Math.min(400 * 2 ** this.retries, 5000));

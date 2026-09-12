@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 type Settings = {
   assistantName: string; wakeWord: string; userName: string; language: string; freeOnlyMode: boolean; safeMode: boolean; lowPowerMode: boolean;
-  voiceEnabled: boolean; wakeWordEnabled: boolean; proactiveEnabled: boolean; dailyBudgetUsd: number; routerMode: string; ttsProvider: string;
+  voiceEnabled: boolean; wakeWordEnabled: boolean; proactiveEnabled: boolean; dailyBudgetUsd: number; routerMode: string; ttsProvider: string; ttsModel: string; ttsVoice: string; chatModelMode: string; chatProvider: string | null; chatModel: string | null; thinkingModelMode: string; thinkingProvider: string | null; thinkingModel: string | null;
   masterVoiceEnabled: boolean; masterGeminiVoice: string; masterElevenVoiceId: string | null; voiceSpeed: number; emotionIntensity: number;
   customVoiceStatus: string; renderMode: string; lipSyncEnabled: boolean;
   openaiKey: string; groqKey: string; openrouterKey: string; elevenLabsKey: string; ollamaUrl: string | null;
@@ -20,7 +20,7 @@ type Settings = {
   permissions: Record<string, boolean>;
   envKeys: Record<string, boolean>;
 };
-type ProviderHealth = { checkedAt: string; anyConfigured: boolean; results: { provider: string; tier: string; model: string; ok: boolean; status: number | string; latencyMs: number }[] };
+type ProviderHealth = { checkedAt: string; anyConfigured: boolean; results: { provider: string; tier: string; model: string; ok: boolean; status: number | string; latencyMs: number; detail?: string }[] };
 type Usage = {
   today: number; budget: number;
   byTier: { tier: string; calls: number; tokensIn: number; tokensOut: number; cost: number; avgLatency: number }[];
@@ -59,6 +59,8 @@ export default function SettingsPage() {
   const [cloneStatus, setCloneStatus] = useState("");
   const [geminiVoices, setGeminiVoices] = useState<string[]>([]);
   const [elevenVoices, setElevenVoices] = useState<{ id: string; name: string }[]>([]);
+  const [localVoices, setLocalVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [localVoiceName, setLocalVoiceName] = useState("");
   // ElevenLabs real diagnostic state.
   const [el11, setEl11] = useState<{ state: string; detail: string; voice?: string; tier?: string; used?: number; limit?: number } | null>(null);
   const [el11Testing, setEl11Testing] = useState(false);
@@ -78,6 +80,18 @@ export default function SettingsPage() {
   }, []);
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const update = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setLocalVoices(voices);
+      setLocalVoiceName(window.localStorage.getItem("jarvish-local-voice") ?? "");
+    };
+    update();
+    window.speechSynthesis.addEventListener("voiceschanged", update);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", update);
+  }, []);
 
   const patch = async (p: Partial<Settings>) => {
     if (!s) return;
@@ -262,7 +276,7 @@ export default function SettingsPage() {
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-slate-400">Identity</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <div><label className="label">Assistant name</label><input className="input" defaultValue={s.assistantName} onBlur={(e) => patch({ assistantName: e.target.value.trim() || "Rio" })} /></div>
-            <div><label className="label" htmlFor="wake-phrase">Wake phrase</label><input id="wake-phrase" className="input" key={s.wakeWord} defaultValue={s.wakeWord} onBlur={(e) => patch({ wakeWord: e.target.value.trim() || "hey rio" })} /><p className="text-sm leading-relaxed text-muted-foreground">Click Wake on the home screen to enable the microphone. Keep the page open; browser recognition requires internet. Auto language uses English (India) for recognition, not automatic language switching.</p></div>
+            <div><label className="label" htmlFor="wake-phrase">Wake phrase</label><input id="wake-phrase" className="input" key={s.wakeWord} defaultValue={s.wakeWord} onBlur={(e) => patch({ wakeWord: e.target.value.trim() || "nova" })} /><p className="text-sm leading-relaxed text-muted-foreground">Click Wake on the home screen to enable the microphone. Keep the page open; browser recognition requires internet. Auto language uses English (India) for recognition, not automatic language switching.</p></div>
             <div><label className="label">Your name</label><input className="input" defaultValue={s.userName} onBlur={(e) => patch({ userName: e.target.value })} /></div>
             <div><label className="label">Language</label>
               <select className="input" value={s.language} onChange={(e) => patch({ language: e.target.value })}>
@@ -271,7 +285,7 @@ export default function SettingsPage() {
             </div>
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <ToggleControl label="Voice replies" desc="Speak answers aloud (ElevenLabs → browser TTS)" value={s.voiceEnabled} onToggle={() => patch({ voiceEnabled: !s.voiceEnabled })} />
+            <ToggleControl label="Voice replies" desc="Speak answers aloud (Fish Audio → Gemini → ElevenLabs → browser)" value={s.voiceEnabled} onToggle={() => patch({ voiceEnabled: !s.voiceEnabled })} />
             <ToggleControl label="Proactive mode" desc="Check-ins, nudges, reminders" value={s.proactiveEnabled} onToggle={() => patch({ proactiveEnabled: !s.proactiveEnabled })} />
             <ToggleControl label="Safe / parental mode" desc="Family-friendly, no flirting" value={s.safeMode} onToggle={() => patch({ safeMode: !s.safeMode })} />
             <ToggleControl label="Low battery mode" desc="Disables heavy animations, prefers fast models" value={s.lowPowerMode} onToggle={() => patch({ lowPowerMode: !s.lowPowerMode })} />
@@ -281,16 +295,19 @@ export default function SettingsPage() {
         {/* Voice engine */}
         <section className="panel p-4">
           <h2 className="mb-1 text-sm font-semibold uppercase tracking-widest text-slate-400">Voice engine</h2>
-          <p className="mb-3 text-xs text-slate-500">Choose which text-to-speech engine speaks. Auto tries Gemini (free) then ElevenLabs (premium) then the browser. Test it to see exactly which one works with your keys.</p>
+          <p className="mb-3 text-xs text-slate-500">Choose which text-to-speech engine speaks. Auto tries Fish Audio via OpenRouter, then Gemini, ElevenLabs, and finally the browser. Test it to see exactly which one returned playable audio.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div><label className="label">TTS engine</label>
               <select className="input" value={s.ttsProvider} onChange={(e) => patch({ ttsProvider: e.target.value })}>
-                <option value="auto">Auto (Gemini → ElevenLabs → browser)</option>
-                <option value="gemini">Gemini TTS (free, needs Gemini key)</option>
-                <option value="elevenlabs">ElevenLabs (premium, needs key)</option>
-                <option value="browser">Browser speech (offline, no key)</option>
+                <option value="auto">Auto (Fish Audio → Gemini → ElevenLabs → browser)</option>
+                <option value="openrouter-fish">Fish Audio via OpenRouter</option>
+                <option value="gemini">Gemini TTS</option>
+                <option value="elevenlabs">ElevenLabs</option>
+                <option value="browser">Browser speech (offline)</option>
               </select>
             </div>
+            <div><label className="label">TTS model</label><input className="input" value={s.ttsModel} onChange={(e) => setS({ ...s, ttsModel: e.target.value })} onBlur={(e) => patch({ ttsModel: e.target.value.trim() || "fish-audio/s2.1-pro" })} placeholder="fish-audio/s2.1-pro" /></div>
+            <div><label className="label">Fish Audio voice</label><input className="input" value={s.ttsVoice} onChange={(e) => setS({ ...s, ttsVoice: e.target.value })} onBlur={(e) => patch({ ttsVoice: e.target.value.trim() || "default" })} placeholder="default" /></div>
             <div className="flex items-end">
               <button className="btn btn-primary w-full" onClick={testVoice}>🔊 Test voice</button>
             </div>
@@ -329,8 +346,17 @@ export default function SettingsPage() {
           <h2 className="mb-1 text-sm font-semibold uppercase tracking-widest text-slate-400">Master character voice</h2>
           <p className="mb-3 text-xs text-slate-500">One consistent female voice for your character everywhere. Emotion changes the delivery, never the identity. When locked, this overrides per-character voices.</p>
           <div className="mb-3"><ToggleControl label="Lock master voice" desc="Use the same voice for every reply (recommended)" value={s.masterVoiceEnabled} onToggle={() => patch({ masterVoiceEnabled: !s.masterVoiceEnabled })} /></div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div><label className="label">Gemini voice (free)</label>
+  <div className="mb-3 rounded-xl border border-cyan-300/15 bg-cyan-300/[0.04] p-3">
+  <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-cyan-200">Local browser voice</div>
+  <p className="mb-3 text-[11px] text-slate-400">Used first on this device. Choose a voice and tune the speed without using cloud TTS.</p>
+  <div className="grid gap-3 sm:grid-cols-2">
+  <div><label className="label">Voice</label><select className="input" value={localVoiceName} onChange={(e) => { const name = e.target.value; setLocalVoiceName(name); window.localStorage.setItem("jarvish-local-voice", name); }}><option value="">Automatic best match</option>{localVoices.map((voice) => <option key={`${voice.name}-${voice.lang}`} value={voice.name}>{voice.name} · {voice.lang}</option>)}</select></div>
+  <div><label className="label flex justify-between"><span>Local speed</span><span>{s.voiceSpeed.toFixed(2)}×</span></label><input aria-label="Local voice speed" type="range" min={0.5} max={1.5} step={0.05} className="w-full accent-cyan-400" value={s.voiceSpeed} onChange={(e) => patch({ voiceSpeed: Number(e.target.value) })} /></div>
+  </div>
+  <button className="btn btn-ghost mt-3 text-xs" onClick={() => { const u = new SpeechSynthesisUtterance("Hi, this is your selected local browser voice."); const selected = localVoices.find((voice) => voice.name === localVoiceName); if (selected) u.voice = selected; u.rate = s.voiceSpeed; window.speechSynthesis.cancel(); window.speechSynthesis.speak(u); }}>Test local voice</button>
+  </div>
+  <div className="grid gap-3 sm:grid-cols-2">
+  <div><label className="label">Gemini voice (free)</label>
               <select className="input" value={s.masterGeminiVoice} onChange={(e) => patch({ masterGeminiVoice: e.target.value })}>
                 {(geminiVoices.length ? geminiVoices : [s.masterGeminiVoice]).map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
@@ -411,7 +437,7 @@ export default function SettingsPage() {
                 <div key={i} className={`flex items-center justify-between rounded-xl border p-2.5 text-xs ${r.ok ? "border-emerald-500/30 bg-emerald-500/5" : "border-rose-500/30 bg-rose-500/5"}`}>
                   <div>
                     <div className="font-medium text-slate-100">{r.ok ? "🟢" : "🔴"} {r.provider} <span className="text-slate-500">· {r.tier}</span></div>
-                    <div className="text-[10px] text-slate-400">{r.model} · status {r.status}</div>
+                    <div className="text-[10px] text-slate-400">{r.model} · status {r.status}</div>{r.detail && <div className="mt-1 max-w-[24rem] break-words text-[10px] text-rose-300/80">{r.detail}</div>}
                   </div>
                   <span className="text-slate-400">{r.latencyMs}ms</span>
                 </div>
@@ -432,7 +458,18 @@ export default function SettingsPage() {
             </div>
             <div><label className="label">Daily budget (USD)</label><input className="input" type="number" step="0.1" min="0" defaultValue={s.dailyBudgetUsd} onBlur={(e) => patch({ dailyBudgetUsd: Number(e.target.value) })} /></div>
           </div>
-          <div className="mt-3"><ToggleControl label="Free-only mode" desc="Only route to free providers (Groq free tier, OpenRouter :free, Ollama, offline)" value={s.freeOnlyMode} onToggle={() => patch({ freeOnlyMode: !s.freeOnlyMode })} /></div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+  <div><label className="label">Chat model mode</label><select className="input" value={s.chatModelMode} onChange={(e) => patch({ chatModelMode: e.target.value })}><option value="auto">Auto routing</option><option value="selected">Selected model</option></select></div>
+  <div><label className="label">Chat provider</label><input className="input" value={s.chatProvider ?? ""} onChange={(e) => setS({ ...s, chatProvider: e.target.value })} onBlur={(e) => patch({ chatProvider: e.target.value.trim() || null })} placeholder="openrouter" /></div>
+  <div><label className="label">Chat model</label><input className="input" value={s.chatModel ?? ""} onChange={(e) => setS({ ...s, chatModel: e.target.value })} onBlur={(e) => patch({ chatModel: e.target.value.trim() || null })} placeholder="provider/model-id" /></div>
+  </div>
+  <div className="mt-3 grid gap-3 sm:grid-cols-3">
+  <div><label className="label">Thinking model mode</label><select className="input" value={s.thinkingModelMode} onChange={(e) => patch({ thinkingModelMode: e.target.value })}><option value="auto">Auto reasoning</option><option value="selected">Selected model</option></select></div>
+  <div><label className="label">Thinking provider</label><input className="input" value={s.thinkingProvider ?? ""} onChange={(e) => setS({ ...s, thinkingProvider: e.target.value })} onBlur={(e) => patch({ thinkingProvider: e.target.value.trim() || null })} placeholder="openrouter" /></div>
+  <div><label className="label">Thinking model</label><input className="input" value={s.thinkingModel ?? ""} onChange={(e) => setS({ ...s, thinkingModel: e.target.value })} onBlur={(e) => patch({ thinkingModel: e.target.value.trim() || null })} placeholder="provider/model-id" /></div>
+  </div>
+  <p className="mt-2 text-[11px] text-slate-500">Audio models are isolated from thinking. Fish Audio can speak, but it will never answer chat messages.</p>
+  <div className="mt-3"><ToggleControl label="Free-only mode" desc="Only route to free text providers and the offline engine" value={s.freeOnlyMode} onToggle={() => patch({ freeOnlyMode: !s.freeOnlyMode })} /></div>
           {usage && (
             <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
               <div className="flex justify-between text-xs text-slate-300"><span>Spent today</span><span>${usage.today.toFixed(4)} / ${usage.budget.toFixed(2)}</span></div>
@@ -470,7 +507,7 @@ export default function SettingsPage() {
           <p className="mb-3 text-xs text-slate-500">Same setup as jarvish 1.0 — API key, base URL and model ID per provider. Leave base URL / model blank to use the default shown in the placeholder.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             {([
-              { prefix: "tokenrouter", label: "TokenRouter", env: "tokenrouter", defBase: "https://api.tokenrouter.io/v1", defModel: "gpt-4o-mini" },
+              { prefix: "tokenrouter", label: "TokenRouter", env: "tokenrouter", defBase: "https://api.tokenrouter.io/v1", defModel: "openai/gpt-5-mini" },
               { prefix: "qwen", label: "Qwen (DashScope)", env: "qwen", defBase: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", defModel: "qwen-plus" },
               { prefix: "aihub", label: "AIHubMix", env: "aihub", defBase: "https://aihubmix.com/v1", defModel: "gpt-4o-mini" },
               { prefix: "custom", label: "Custom (any OpenAI-compatible)", env: "custom", defBase: "https://openrouter.ai/api/v1", defModel: "gpt-4o-mini" },

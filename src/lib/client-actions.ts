@@ -125,8 +125,8 @@ export async function performAction(
           body: JSON.stringify({ image: dataUrl, question: action.question }),
         });
         const j = (await res.json()) as { description?: string; error?: string };
-        if (!res.ok || !j.description) return { ok: false, detail: j.error ?? "couldn't read the screen", screenshot: dataUrl };
-        return { ok: true, detail: j.description, screenshot: dataUrl };
+        if (!res.ok || !j.description) return { ok: false, detail: j.error ?? "couldn't read the screen" };
+        return { ok: true, detail: j.description };
       } catch (e) {
         const msg = e instanceof Error ? e.message : "screen capture failed";
         return { ok: false, detail: /denied|dismissed|abort/i.test(msg) ? "You cancelled the screen picker." : msg };

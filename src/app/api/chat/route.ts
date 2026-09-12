@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 export async function POST(req: Request) {
-  let body: { message?: string; conversationId?: number | null; characterId?: number | null; forceTier?: Tier };
+  let body: { message?: string; conversationId?: number | null; characterId?: number | null; forceTier?: Tier; selectedProvider?: string | null; selectedModel?: string | null };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     async start(controller) {
       const send = (obj: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
       try {
-        for await (const ev of think({ message, conversationId: body.conversationId ?? null, characterId: body.characterId ?? null, forceTier: body.forceTier })) {
+        for await (const ev of think({ message, conversationId: body.conversationId ?? null, characterId: body.characterId ?? null, forceTier: body.forceTier, selectedProvider: body.selectedProvider, selectedModel: body.selectedModel })) {
           send(ev);
         }
       } catch (e) {

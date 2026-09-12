@@ -170,14 +170,14 @@ async function respond(c: CharacterLike, message: string, userName: string, sink
   const open = m.match(/^(?:open|go to|launch|visit|start)\s+(.+?)[.!?]?$/i);
   if (open && !/\b(reminder|todo|to-do|note|list|door|window|up|about)\b/i.test(open[1])) {
     const target = open[1].trim();
-    const yt = target.match(/^(?:youtube|yt)\s+(?:and\s+)?(?:search\s+(?:for\s+)?|play\s+)?(.+)/i);
-    const r = yt ? await call("search_youtube", { query: yt[1] }) : await call("open_url", { url: target });
+    const yt = target.match(/^(?:youtube|yt)(?:\s+(?:and\s+)?(?:search\s+(?:for\s+)?|play\s+)?(.+))?$/i);
+    const r = yt ? (yt[1]?.trim() ? await call("search_youtube", { query: yt[1].trim() }) : await call("open_url", { url: "https://www.youtube.com" })) : await call("open_url", { url: target });
     return { text: say(`On it, {nick}. ${r}`, "happy"), toolCalls: calls };
   }
   // --- Play / watch something on YouTube ---
   const play = m.match(/^(?:play|watch|find)\s+(?:me\s+)?(.+?)(?:\s+on\s+youtube)?[.!?]?$/i);
   if (play && /youtube|song|video|trailer|music|episode/i.test(lower)) {
-    const q = play[1].replace(/\bon youtube\b/i, "").trim();
+    const q = play[1].replace(/\bon youtube\b/i, "").replace(/\b(?:a|some)\s+song\b/i, "song").trim();
     const r = await call("search_youtube", { query: q });
     return { text: say(`Pulling that up, {nick}. ${r}`, "excited"), toolCalls: calls };
   }

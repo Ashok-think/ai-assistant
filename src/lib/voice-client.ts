@@ -5,13 +5,13 @@ import { toSpeechText } from "./speech-text";
 /**
  * VOICE PIPELINE (web companion)
  *  wake word → STT (Web Speech API, streaming interim results) → /api/chat → TTS
- *  TTS: /api/tts (Gemini TTS → ElevenLabs, emotion-aware) → fallback to browser
- *       speechSynthesis with per-character pitch/rate.
+ *  TTS: browser speechSynthesis (local-first) → /api/tts cloud fallback.
+ *       Local speech uses per-character pitch/rate; cloud TTS remains available when no browser voice exists.
  *  Interrupt: calling stopSpeaking() at any time (e.g., when the user starts talking) cuts audio.
  *  The Flutter app swaps these for Porcupine/openWakeWord + Whisper + ElevenLabs streaming.
  */
 
-export type VoiceSettings = { pitch: number; rate: number; warmth: number; elevenLabsVoiceId?: string; geminiVoice?: string; lang?: string };
+export type VoiceSettings = { pitch: number; rate: number; warmth: number; localVoiceName?: string; ttsProvider?: string; elevenLabsVoiceId?: string; geminiVoice?: string; ttsModel?: string; ttsVoice?: string; lang?: string };
 
 type SR = {
   lang: string;
@@ -174,14 +174,18 @@ function ensureVoices(): Promise<SpeechSynthesisVoice[]> {
       resolve(window.speechSynthesis.getVoices());
     };
     window.speechSynthesis.onvoiceschanged = finish;
-    // Safety net: some browsers never fire the event. Kept short so browser-fallback speech isn't
-    // delayed — voices almost always load in <250ms, and `finish` fires the instant they're ready.
-    setTimeout(finish, 250);
+    // Safety net: some browsers never fire the event. Keep the fallback nearly immediate so
+    // browser speech does not add noticeable silence after a reply.
+    setTimeout(finish, 80);
   });
 }
 
-function pickVoice(lang: string, warmth: number): SpeechSynthesisVoice | null {
+function pickVoice(lang: string, warmth: number, selectedName?: string): SpeechSynthesisVoice | null {
   const voices = window.speechSynthesis.getVoices();
+  if (selectedName) {
+    const selected = voices.find((voice) => voice.name === selectedName);
+    if (selected) return selected;
+  }
   if (!voices.length) return null;
   const base = lang.split("-")[0];
   const sameLang = voices.filter((v) => v.lang.toLowerCase().startsWith(base));
@@ -201,12 +205,14 @@ export async function speak(text: string, opts: { voice: VoiceSettings; emotion:
   const clean = toSpeechText(text);
   if (!clean) return;
 
-  // 1) Server TTS (Gemini → ElevenLabs). 204 means no provider configured.
-  try {
+  // Prefer the device's local browser voice. This avoids cloud/bot voices and starts speaking
+  // immediately; the server TTS route remains available for environments without speech synthesis.
+  const preferLocalVoice = typeof window !== "undefined" && "speechSynthesis" in window;
+  if (!preferLocalVoice) try {
     const r = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: clean, voiceId: opts.voice.elevenLabsVoiceId, geminiVoice: opts.voice.geminiVoice, emotion: opts.emotion }),
+      body: JSON.stringify({ text: clean, voiceId: opts.voice.elevenLabsVoiceId, geminiVoice: opts.voice.geminiVoice, provider: opts.voice.ttsProvider, model: opts.voice.ttsModel, voice: opts.voice.ttsVoice, emotion: opts.emotion }),
       signal: controller.signal,
     });
     if (canceled()) return;
@@ -272,7 +278,7 @@ export async function speak(text: string, opts: { voice: VoiceSettings; emotion:
     const { pitch, rate } = emotionAdjust(opts.emotion, opts.voice);
     u.pitch = pitch;
     u.rate = rate;
-    const v = pickVoice(lang, opts.voice.warmth);
+    const v = pickVoice(lang, opts.voice.warmth, opts.voice.localVoiceName);
     if (v) u.voice = v;
     u.onstart = () => {
       opts.onStart?.();
