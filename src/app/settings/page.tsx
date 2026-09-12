@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import ModelMcpSettings from "@/components/ModelMcpSettings";
 
 type Settings = {
   assistantName: string; wakeWord: string; userName: string; language: string; freeOnlyMode: boolean; safeMode: boolean; lowPowerMode: boolean;
@@ -271,6 +272,7 @@ export default function SettingsPage() {
       </header>
 
       <div className="grid gap-4 lg:grid-cols-2">
+        <ModelMcpSettings />
         {/* Identity */}
         <section className="panel p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-slate-400">Identity</h2>

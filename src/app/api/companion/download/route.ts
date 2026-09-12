@@ -2,22 +2,24 @@ const setupScript = `# Jarvish Windows Companion setup
 $ErrorActionPreference = "Stop"
 $JarvishHome = Join-Path $env:USERPROFILE "Jarvish"
 $ConfigDir = Join-Path $JarvishHome "config"
+$ExistingConfig = Join-Path $ConfigDir "permissions.json"
 New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
-$config = @{
-  version = "0.1.0"
-  companion = "windows"
-  permissions = @{
-    microphone = $false
-    files = $true
-    browser = $false
-    screen = $false
-  }
-  paired = $false
-} | ConvertTo-Json -Depth 4
-Set-Content -Path (Join-Path $ConfigDir "permissions.json") -Value $config -Encoding UTF8
+if (Test-Path $ExistingConfig) {
+  Copy-Item $ExistingConfig (Join-Path $ConfigDir "permissions.backup.json") -Force
+  Write-Host "Existing Jarvish settings found. Updating companion while preserving permissions."
+} else {
+  $config = @{
+    version = "0.2.0"
+    companion = "windows"
+    permissions = @{ microphone = $false; files = $true; browser = $false; screen = $false }
+    paired = $false
+  } | ConvertTo-Json -Depth 4
+  Set-Content -Path $ExistingConfig -Value $config -Encoding UTF8
+}
+Set-Content -Path (Join-Path $JarvishHome "COMPANION_VERSION") -Value "0.2.0" -Encoding UTF8
 Start-Process "https://jarvish.vercel.app/cloud"
-Write-Host "Jarvish folder created at $JarvishHome"
-Write-Host "Open Jarvish Cloud to finish secure pairing. No device permissions were granted automatically."
+Write-Host "Jarvish companion updated at $JarvishHome"
+Write-Host "Your config and permissions were preserved. Open Jarvish Cloud to finish secure pairing."
 Read-Host "Press Enter to close"
 `;
 
