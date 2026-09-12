@@ -41,7 +41,7 @@ export const BROWSER_TOOLS: ToolDef[] = [
       const key = raw.toLowerCase().replace(/^(open|go to|launch|visit)\s+/, "").replace(/\s+/g, "");
       const target = SITE_SHORTCUTS[key] ?? (/^https?:\/\//.test(raw) ? raw : `https://${raw.replace(/\s+/g, "")}`);
       const r = await open(target);
-      return r.ok ? `Opened (verified). ${snap(r.data)}` : `Could not open ${target}: ${r.error}`;
+      return r.ok ? `Opened (verified). ${snap(r.data)}` : `Browser control unavailable: ${r.error}. This cloud session cannot control the user's local browser; use the client open_url action instead.`;
     },
   },
   {
@@ -134,7 +134,7 @@ export const BROWSER_TOOLS: ToolDef[] = [
     run: async (a) => {
       const { googleSearch } = await ex();
       const r = await googleSearch(str(a.query));
-      if (!r.ok) return `Google search failed: ${r.error}`;
+      if (!r.ok) return `Browser control unavailable: ${r.error}. This cloud session cannot control the user's local browser; use the client search action instead.`;
       const list = r.data.results.map((x) => `[${x.i}] ${x.title} — ${x.href}`).join("\n");
       return list ? `Google results:\n${list}` : "No results parsed from the page.";
     },
@@ -147,7 +147,7 @@ export const BROWSER_TOOLS: ToolDef[] = [
     run: async (a) => {
       const { youtubeSearch } = await ex();
       const r = await youtubeSearch(str(a.query));
-      if (!r.ok) return `YouTube search failed: ${r.error}`;
+      if (!r.ok) return `Browser control unavailable: ${r.error}. This cloud session cannot control the user's local browser; use the client YouTube search action instead.`;
       const list = r.data.results.map((x) => `[${x.i}] ${x.title} — ${x.href}`).join("\n");
       return list ? `YouTube results:\n${list}` : "No videos parsed from the results page.";
     },
@@ -163,7 +163,7 @@ export const BROWSER_TOOLS: ToolDef[] = [
       const r = await youtubeOpen(str(a.href));
       return r.ok
         ? `Opened video (verified). Title: "${r.data.title}". URL: ${r.data.url}. Playing: ${r.data.playing}.`
-        : `Could not open/verify that video: ${r.error}`;
+        : `Browser control unavailable: ${r.error}. This cloud session cannot control the user's local browser, so playback was not verified.`;
     },
   },
   {

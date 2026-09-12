@@ -74,6 +74,7 @@ export default function Home() {
   const [voiceOn, setVoiceOn] = useState(true);
   const speakingRef = useRef(false); // true while TTS is playing — enables barge-in detection
   const lastSpokenRef = useRef("");
+  const voiceCaptureMuteUntilRef = useRef(0);
   const [showChars, setShowChars] = useState(false);
   const [debug, setDebug] = useState(false);
   const [browserStatus, setBrowserStatus] = useState<{ enabled: boolean; playwrightInstalled: boolean; running: boolean; ready: boolean } | null>(null);
@@ -229,6 +230,7 @@ export default function Home() {
       // handler to treat input as a barge-in (and it ignores very short/echo-like fragments).
       speakingRef.current = true;
       lastSpokenRef.current = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      voiceCaptureMuteUntilRef.current = Date.now() + Math.max(800, Math.min(8000, text.length * 45));
       await speak(text, {
         voice: { ...s.character.voice, rate: (s.character.voice.rate ?? 1) * (s.settings.voiceSpeed ?? 1), localVoiceName: typeof window !== "undefined" ? window.localStorage.getItem("jarvish-local-voice") ?? undefined : undefined, localLatencyTargetMs: s.settings.localLatencyTargetMs, apiLatencyTargetMs: s.settings.apiLatencyTargetMs, ttsProvider: s.settings.ttsProvider, ttsModel: s.settings.ttsModel, ttsVoice: s.settings.ttsVoice }, emotion: emo, lang: s.settings.language,
         onStart: () => { setTalking(true); if (reqStart) setLatency((l) => ({ ...(l ?? {}), firstAudio: Math.round(performance.now() - reqStart) })); },
@@ -539,6 +541,7 @@ export default function Home() {
     phrase: state?.settings.wakeWord || "nova",
     language: state?.settings.language || "auto",
       onCommand: (command) => {
+        if (Date.now() < voiceCaptureMuteUntilRef.current) return;
         const normalized = correctTranscript(command).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
         const spoken = lastSpokenRef.current;
         if (spoken && normalized.length >= 8 && (spoken.includes(normalized) || normalized.includes(spoken))) {
@@ -683,7 +686,7 @@ export default function Home() {
               </div>
             ) : (
               <p className="mt-2 text-[11px] text-slate-500">
-                {state.online ? `Auto-routes each message: quick chat → fast model, hard tasks → smart model.` : "No API key yet — running the built-in offline persona engine. Add a free Groq key in Settings for the full brain."}
+                {state.online ? `Auto-routes each message: quick chat → fast model, hard tasks → smart model.` : "No API key yet ��� running the built-in offline persona engine. Add a free Groq key in Settings for the full brain."}
               </p>
             )}
           </div>
