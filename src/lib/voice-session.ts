@@ -146,6 +146,7 @@ export class VoiceSession {
     let interrupted = false;
     let hadResults = false;
     let lastResult = "";
+    let lastTranscript = "";
     let failure = "";
     const capturing = () => mode !== "wake" || this.awakeUntil > this.now();
     const command = (text: string) => {
@@ -174,6 +175,7 @@ export class VoiceSession {
       lastResult = fingerprint;
       hadResults ||= Boolean(result.final);
       const heard = [result.final, result.interim].filter(Boolean).join(" ");
+      lastTranscript = result.final || result.interim || lastTranscript;
       this.update({ heard });
       const remaining = result.final.startsWith(consumed) ? result.final.slice(consumed.length).trim() : result.final;
       const wake = matchesWake(remaining, phrase);
@@ -221,6 +223,9 @@ export class VoiceSession {
     rec.onend = () => {
       if (!current()) return;
       this.clear(this.silence);
+      // Chrome can end with only an interim transcript. Promote it so wake commands
+      // like “Nova, open YouTube” are not discarded before the recognizer restarts.
+      if (!final && lastTranscript) final = lastTranscript;
       if (!failure) submit();
       if (!current()) return;
       this.detach();
