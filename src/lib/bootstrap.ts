@@ -249,7 +249,12 @@ async function backfillCharacterVoices() {
 }
 
 export async function ensureSeeded() {
-  if (seeded) return;
+  // Re-run the lightweight column migration even after the seed flag is set. This is
+  // important during dev HMR and for databases created before a newer settings field.
+  if (seeded) {
+    await migrate();
+    return;
+  }
   await ensureTables();
   await migrate();
 

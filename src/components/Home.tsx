@@ -97,8 +97,11 @@ export default function Home() {
   stateRef.current = state;
 
   const load = useCallback(async () => {
-    const r = await fetch("/api/state");
-    const j = (await r.json()) as State;
+    const r = await fetch("/api/state", { cache: "no-store" });
+    const body = await r.text();
+    if (!r.ok) throw new Error(`State request failed (${r.status})${body ? `: ${body.slice(0, 160)}` : ""}`);
+    if (!body.trim()) throw new Error("State request returned an empty response");
+    const j = JSON.parse(body) as State;
     setState(j);
     setVoiceOn(j.settings.voiceEnabled);
     setEmotion((j.character.defaultMood as AvatarEmotion) ?? "happy");
@@ -109,6 +112,9 @@ export default function Home() {
     fetch("/api/models").then((r) => r.json()).then((j) => setModels(j.slots ?? { thinking: [], chat: [], audio: [] })).catch(() => undefined);
     load().then((j) => {
       setMsgs([{ id: "greet", role: "assistant", content: j.greeting, emotion: j.character.defaultMood as AvatarEmotion, characterName: j.character.name }]);
+    }).catch((error) => {
+      console.error("[v0] Failed to load assistant state:", error);
+      setStatus("State unavailable. Retrying…");
     });
     const saved = typeof window !== "undefined" ? window.localStorage.getItem("convId") : null;
     if (saved) convRef.current = Number(saved);
