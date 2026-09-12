@@ -8,7 +8,7 @@ import { ArrowUp, ArrowUpRight, AudioLines, ChevronDown, Mic, Paperclip, Plus, R
 import Waveform from "./Waveform";
 import ActionTimeline from "./ActionTimeline";
 import ToolConfirmation from "./ToolConfirmation";
-import { speak, stopSpeaking, type VoiceSettings } from "@/lib/voice-client";
+import { speak, stopSpeaking, setSpeechBargeInHandler, type VoiceSettings } from "@/lib/voice-client";
 import { useVoiceSession } from "./useVoiceSession";
 import VoiceDiagnostics from "./VoiceDiagnostics";
 import { performAction, type ActionState } from "@/lib/client-actions";
@@ -88,6 +88,7 @@ export default function Home() {
   const convRef = useRef<number | null>(null);
   const busyRef = useRef(false);
   const chatAbortRef = useRef<AbortController | null>(null);
+  const responseGenerationRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const seenRef = useRef<Set<string>>(new Set());
@@ -409,6 +410,7 @@ export default function Home() {
       // follow-up turn (screen reading) would deadlock against `busy`.
       const queued: { id: string; action: ClientAction }[] = [];
       const ctl = new AbortController();
+      const responseGeneration = ++responseGenerationRef.current;
       chatAbortRef.current = ctl;
       // Latency instrumentation (real perf-clock timestamps for the debug panel).
       const reqStart = performance.now();
@@ -429,6 +431,7 @@ export default function Home() {
           const parts = buf.split("\n\n");
           buf = parts.pop() ?? "";
           for (const p of parts) {
+            if (responseGeneration !== responseGenerationRef.current || ctl.signal.aborted) return;
             if (!p.startsWith("data: ")) continue;
             const ev = JSON.parse(p.slice(6));
             if (ev.type === "route") {
@@ -514,6 +517,16 @@ export default function Home() {
   );
   sendRef.current = send;
 
+  useEffect(() => {
+    return () => setSpeechBargeInHandler(null);
+  }, []);
+
+  setSpeechBargeInHandler(() => {
+    responseGenerationRef.current += 1;
+    chatAbortRef.current?.abort();
+    stopSpeaking();
+  });
+
   const { voice, micLevel, tone, startListening, stopListening } = useVoiceSession({
     phrase: state?.settings.wakeWord || "nova",
     language: state?.settings.language || "auto",
@@ -522,6 +535,8 @@ export default function Home() {
       void sendRef.current?.(correctTranscript(command));
     },
     onInterrupt: () => {
+      responseGenerationRef.current += 1;
+      chatAbortRef.current?.abort();
       stopSpeaking();
       speakingRef.current = false;
       setTalking(false);

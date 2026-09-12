@@ -175,7 +175,8 @@ async function respond(c: CharacterLike, message: string, userName: string, sink
     return { text: say(`On it, {nick}. ${r}`, "happy"), toolCalls: calls };
   }
   // --- Play / watch something on YouTube ---
-  const play = m.match(/^(?:play|watch|find)\s+(?:me\s+)?(.+?)(?:\s+on\s+youtube)?[.!?]?$/i);
+  const correctedPlay = m.match(/^(?:not|no)\s+.+?,?\s*(?:play|watch)\s+(?:me\s+)?(.+?)(?:\s+on\s+youtube)?[.!?]?$/i);
+  const play = correctedPlay ?? m.match(/^(?:play|watch|find)\s+(?:me\s+)?(.+?)(?:\s+on\s+youtube)?[.!?]?$/i);
   if (play && /youtube|song|video|trailer|music|episode/i.test(lower)) {
     const q = play[1].replace(/\bon youtube\b/i, "").replace(/\b(?:a|some)\s+song\b/i, "song").trim();
     const r = await call("search_youtube", { query: q });
