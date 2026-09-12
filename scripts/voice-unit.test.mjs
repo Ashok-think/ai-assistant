@@ -133,6 +133,40 @@ test("push to talk needs no wake phrase and returns to idle", async () => {
   assert.deepEqual(f.commands, ["Take a note"]); assert.equal(f.state.phase, "idle");
 });
 
+test("wake expiry cancels a pending restart instead of opening two recognizers", async () => {
+  const f = fixture(); await f.start(); f.recognizers[0].onstart();
+  f.result([["Hey Rio"]]); f.tick(7800); f.recognizers[0].onend();
+  f.tick(400);
+  assert.equal(f.recognizers.length, 2);
+  assert.equal(f.recognizers.filter((rec) => !rec.aborted).length, 1);
+  f.session.stop();
+});
+
+test("push-to-talk retains network errors after recognition ends", async () => {
+  const f = fixture(); await f.start("once");
+  f.recognizers[0].onerror({ error: "network" }); f.recognizers[0].onend();
+  assert.equal(f.state.phase, "error"); assert.match(f.state.error, /internet/);
+  assert.equal(f.timers.size, 0);
+});
+
+test("an interrupt handler that stops the session cannot dispatch a command", async () => {
+  const f = fixture({ onInterrupt: () => f.session.stop() }); await f.start();
+  f.result([["Hey Rio do not dispatch"]]); f.tick(20000);
+  assert.equal(f.state.phase, "idle"); assert.deepEqual(f.commands, []); assert.equal(f.timers.size, 0);
+});
+
+test("service errors without an end event terminate after a bounded fallback", async () => {
+  const f = fixture(); await f.start("once");
+  f.recognizers[0].onerror({ error: "network" }); f.tick(1000);
+  assert.equal(f.state.phase, "error"); assert.equal(f.timers.size, 0);
+});
+
+test("interim wake or stop hypotheses never interrupt TTS", async () => {
+  const f = fixture(); await f.start("auto"); f.occupy();
+  f.result([["stop", false]]); f.result([["Hey Rio", false]]); f.tick(2000);
+  assert.equal(f.interrupts, 0); assert.deepEqual(f.commands, []); f.session.stop();
+});
+
 test("fatal microphone error detaches callbacks and all timers", async () => {
   const f = fixture(); await f.start(); f.recognizers[0].onerror({ error: "audio-capture" }); f.tick(20000);
   assert.equal(f.state.phase, "error"); assert.equal(f.recognizers[0].onend, null); assert.equal(f.timers.size, 0);
