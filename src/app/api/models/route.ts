@@ -27,7 +27,7 @@ export async function GET() {
     }));
 
   const textModels = models.filter((m) => m.capability === "text" && !/fish[-_ ]?audio/i.test(m.model));
-  return Response.json({ models, slots: { thinking: textModels, chat: textModels, audio: [{ id: "openrouter-fish/fish-audio/s2.1-pro", provider: "openrouter-fish", model: "fish-audio/s2.1-pro", tier: "tts", capability: "audio", supportsTools: false, free: false, configured: Boolean(process.env.OPENROUTER_API_KEY || settings.openrouterKey), label: "OpenRouter · Fish Audio S2.1 Pro" }] } });
+  return Response.json({ models, slots: { thinking: textModels, chat: textModels, audio: [{ id: "openrouter/fish-audio/s2.1-pro", provider: "openrouter", model: "fish-audio/s2.1-pro", tier: "tts", capability: "audio", supportsTools: false, free: false, configured: Boolean(process.env.OPENROUTER_API_KEY || settings.openrouterKey), label: "OpenRouter · Fish Audio S2.1 Pro" }] } });
 }
 
 export function OPTIONS() {

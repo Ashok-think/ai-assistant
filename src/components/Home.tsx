@@ -215,7 +215,7 @@ export default function Home() {
       // handler to treat input as a barge-in (and it ignores very short/echo-like fragments).
       speakingRef.current = true;
       await speak(text, {
-        voice: { ...s.character.voice, rate: (s.character.voice.rate ?? 1) * (s.settings.voiceSpeed ?? 1), localVoiceName: typeof window !== "undefined" ? window.localStorage.getItem("jarvish-local-voice") ?? undefined : undefined, ttsModel: s.settings.ttsModel, ttsVoice: s.settings.ttsVoice }, emotion: emo, lang: s.settings.language,
+        voice: { ...s.character.voice, rate: (s.character.voice.rate ?? 1) * (s.settings.voiceSpeed ?? 1), localVoiceName: typeof window !== "undefined" ? window.localStorage.getItem("jarvish-local-voice") ?? undefined : undefined, ttsProvider: s.settings.ttsProvider, ttsModel: s.settings.ttsModel, ttsVoice: s.settings.ttsVoice }, emotion: emo, lang: s.settings.language,
         onStart: () => { setTalking(true); if (reqStart) setLatency((l) => ({ ...(l ?? {}), firstAudio: Math.round(performance.now() - reqStart) })); },
         onEnd: () => setTalking(false), onMouth: setMouth,
         onProvider: (p) => { setLastTtsProvider(p); if (p !== "browser") setTtsFallbackReason(""); },
@@ -237,7 +237,7 @@ export default function Home() {
       ? { thinkingModelMode: "selected", thinkingProvider: selected.provider, thinkingModel: selected.model }
       : slot === "chat"
         ? { chatModelMode: "selected", chatProvider: selected.provider, chatModel: selected.model }
-        : { ttsProvider: selected.provider, ttsModel: selected.model };
+        : { ttsProvider: "openrouter-fish", ttsModel: selected.model };
     await fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
     setState((current) => current ? { ...current, settings: { ...current.settings, ...patch } } : current);
   }, [models]);
@@ -718,7 +718,7 @@ export default function Home() {
             <div className="mb-2 text-[10px] uppercase tracking-widest text-slate-500">Active model slots</div>
             {(["thinking", "chat", "audio"] as const).map((slot) => {
               const options = models[slot];
-              const current = slot === "thinking" ? `${state.settings.thinkingProvider ?? ""}/${state.settings.thinkingModel ?? ""}` : slot === "chat" ? `${state.settings.chatProvider ?? ""}/${state.settings.chatModel ?? ""}` : `${state.settings.ttsProvider}/${state.settings.ttsModel}`;
+              const current = slot === "thinking" ? `${state.settings.thinkingProvider ?? ""}/${state.settings.thinkingModel ?? ""}` : slot === "chat" ? `${state.settings.chatProvider ?? ""}/${state.settings.chatModel ?? ""}` : `${state.settings.ttsProvider === "openrouter-fish" ? "openrouter" : state.settings.ttsProvider}/${state.settings.ttsModel}`;
               return <label key={slot} className="mb-2 block text-xs text-slate-300"><span className="mb-1 block capitalize">{slot} {slot === "audio" ? "(Fish Audio stays here)" : ""}</span><select className="input !py-1.5 text-xs" value={current} onChange={(e) => setModelSlot(slot, e.target.value)}><option value={current}>{current === "/" || current.endsWith("/") ? "Auto routing" : current}</option>{options.filter((m) => m.configured).map((m) => <option key={m.id} value={m.id}>{m.label} · {m.tier}</option>)}</select></label>;
             })}
             <p className="mt-1 text-[10px] text-slate-500">Thinking and chat only show text-capable models. Audio models never answer messages.</p>

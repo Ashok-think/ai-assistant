@@ -75,13 +75,13 @@ export async function POST(req: Request) {
   const attempts: Attempt[] = [];
 
   // Respect the user's engine preference from Settings.
-  const pref = (st.ttsProvider ?? "auto") as "auto" | "gemini" | "elevenlabs" | "openrouter-fish" | "browser";
+  const pref = (st.ttsProvider ?? "auto") as "auto" | "gemini" | "elevenlabs" | "openrouter-fish" | "fish-audio" | "browser";
   let order: ("gemini" | "elevenlabs" | "openrouter-fish")[];
   if (body.provider) order = [body.provider];
   else if (pref === "browser") order = [];
   else if (pref === "gemini") order = ["gemini", "openrouter-fish", "elevenlabs"];
   else if (pref === "elevenlabs") order = ["elevenlabs", "openrouter-fish", "gemini"];
-  else if (pref === "openrouter-fish") order = ["openrouter-fish", "gemini", "elevenlabs"];
+  else if (pref === "openrouter-fish" || pref === "fish-audio") order = ["openrouter-fish", "gemini", "elevenlabs"];
   else order = ["openrouter-fish", "gemini", "elevenlabs"];
 
   for (const provider of order) {
