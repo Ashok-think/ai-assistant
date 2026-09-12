@@ -64,6 +64,8 @@ export async function* think(opts: {
   conversationId?: number | null;
   characterId?: number | null;
   forceTier?: Tier;
+  selectedProvider?: string | null;
+  selectedModel?: string | null;
 }): AsyncGenerator<BrainEvent> {
   const st = await getSettings();
   const charId = opts.characterId ?? st.activeCharacterId;
@@ -105,7 +107,7 @@ export async function* think(opts: {
   }) + (directive ? `\n\n${directive}` : "");
 
   const historyChars = history.reduce((n, m) => n + m.content.length, 0);
-  const chain = await routeChain({ settings: st, message: opts.message, historyChars, systemPromptChars: systemPrompt.length, forceTier: opts.forceTier });
+  const chain = await routeChain({ settings: st, message: opts.message, historyChars, systemPromptChars: systemPrompt.length, forceTier: opts.forceTier, selectedProvider: opts.selectedProvider, selectedModel: opts.selectedModel });
   let decision: RouteDecision = chain[0];
   const announce = (d: RouteDecision): BrainEvent => ({
     type: "route",

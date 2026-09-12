@@ -203,12 +203,14 @@ export async function routeChain(opts: {
   const catalog = buildCatalog(s);
   const reasons: string[] = [];
 
-  if (s.chatModelMode === "selected" && s.chatProvider && s.chatModel) {
-    const selected = catalog.find((entry) => entry.spec.provider === s.chatProvider && entry.spec.model === s.chatModel);
+  const selectedProvider = opts.selectedProvider ?? (s.thinkingModelMode === "selected" ? s.thinkingProvider : s.chatModelMode === "selected" ? s.chatProvider : null);
+  const selectedModel = opts.selectedModel ?? (s.thinkingModelMode === "selected" ? s.thinkingModel : s.chatModelMode === "selected" ? s.chatModel : null);
+  if (selectedProvider && selectedModel) {
+    const selected = catalog.find((entry) => entry.spec.provider === selectedProvider && entry.spec.model === selectedModel);
     if (selected) {
-      return [{ tier: selected.tier, spec: selected.spec, apiKey: selected.key, reason: `selected model ${s.chatProvider}/${s.chatModel}`, complexity, estimatedInputTokens, budgetUsedUsd: spent, budgetUsd: s.dailyBudgetUsd }, { tier: "offline", spec: OFFLINE_SPEC, apiKey: null, reason: "selected model failed → offline persona engine", complexity, estimatedInputTokens, budgetUsedUsd: spent, budgetUsd: s.dailyBudgetUsd }];
+      return [{ tier: selected.tier, spec: selected.spec, apiKey: selected.key, reason: `selected thinking model ${selectedProvider}/${selectedModel}`, complexity, estimatedInputTokens, budgetUsedUsd: spent, budgetUsd: s.dailyBudgetUsd }, { tier: "offline", spec: OFFLINE_SPEC, apiKey: null, reason: "selected thinking model failed → offline persona engine", complexity, estimatedInputTokens, budgetUsedUsd: spent, budgetUsd: s.dailyBudgetUsd }];
     }
-    reasons.push(`selected model unavailable: ${s.chatProvider}/${s.chatModel}`);
+    reasons.push(`selected thinking model unavailable: ${selectedProvider}/${selectedModel}`);
   }
 
   let wanted: Tier = complexity >= 0.45 ? "smart" : "fast";

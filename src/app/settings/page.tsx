@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 type Settings = {
   assistantName: string; wakeWord: string; userName: string; language: string; freeOnlyMode: boolean; safeMode: boolean; lowPowerMode: boolean;
-  voiceEnabled: boolean; wakeWordEnabled: boolean; proactiveEnabled: boolean; dailyBudgetUsd: number; routerMode: string; ttsProvider: string; ttsModel: string; ttsVoice: string; chatModelMode: string; chatProvider: string | null; chatModel: string | null;
+  voiceEnabled: boolean; wakeWordEnabled: boolean; proactiveEnabled: boolean; dailyBudgetUsd: number; routerMode: string; ttsProvider: string; ttsModel: string; ttsVoice: string; chatModelMode: string; chatProvider: string | null; chatModel: string | null; thinkingModelMode: string; thinkingProvider: string | null; thinkingModel: string | null;
   masterVoiceEnabled: boolean; masterGeminiVoice: string; masterElevenVoiceId: string | null; voiceSpeed: number; emotionIntensity: number;
   customVoiceStatus: string; renderMode: string; lipSyncEnabled: boolean;
   openaiKey: string; groqKey: string; openrouterKey: string; elevenLabsKey: string; ollamaUrl: string | null;
@@ -440,7 +440,13 @@ export default function SettingsPage() {
   <div><label className="label">Chat provider</label><input className="input" value={s.chatProvider ?? ""} onChange={(e) => setS({ ...s, chatProvider: e.target.value })} onBlur={(e) => patch({ chatProvider: e.target.value.trim() || null })} placeholder="openrouter" /></div>
   <div><label className="label">Chat model</label><input className="input" value={s.chatModel ?? ""} onChange={(e) => setS({ ...s, chatModel: e.target.value })} onBlur={(e) => patch({ chatModel: e.target.value.trim() || null })} placeholder="provider/model-id" /></div>
   </div>
-  <div className="mt-3"><ToggleControl label="Free-only mode" desc="Only route to free providers (Groq free tier, OpenRouter :free, Ollama, offline)" value={s.freeOnlyMode} onToggle={() => patch({ freeOnlyMode: !s.freeOnlyMode })} /></div>
+  <div className="mt-3 grid gap-3 sm:grid-cols-3">
+  <div><label className="label">Thinking model mode</label><select className="input" value={s.thinkingModelMode} onChange={(e) => patch({ thinkingModelMode: e.target.value })}><option value="auto">Auto reasoning</option><option value="selected">Selected model</option></select></div>
+  <div><label className="label">Thinking provider</label><input className="input" value={s.thinkingProvider ?? ""} onChange={(e) => setS({ ...s, thinkingProvider: e.target.value })} onBlur={(e) => patch({ thinkingProvider: e.target.value.trim() || null })} placeholder="openrouter" /></div>
+  <div><label className="label">Thinking model</label><input className="input" value={s.thinkingModel ?? ""} onChange={(e) => setS({ ...s, thinkingModel: e.target.value })} onBlur={(e) => patch({ thinkingModel: e.target.value.trim() || null })} placeholder="provider/model-id" /></div>
+  </div>
+  <p className="mt-2 text-[11px] text-slate-500">Audio models are isolated from thinking. Fish Audio can speak, but it will never answer chat messages.</p>
+  <div className="mt-3"><ToggleControl label="Free-only mode" desc="Only route to free text providers and the offline engine" value={s.freeOnlyMode} onToggle={() => patch({ freeOnlyMode: !s.freeOnlyMode })} /></div>
           {usage && (
             <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
               <div className="flex justify-between text-xs text-slate-300"><span>Spent today</span><span>${usage.today.toFixed(4)} / ${usage.budget.toFixed(2)}</span></div>

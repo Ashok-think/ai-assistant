@@ -25,6 +25,9 @@ export const settings = sqliteTable("settings", {
   chatModelMode: text("chat_model_mode").notNull().default("auto"), // auto | selected
   chatProvider: text("chat_provider"),
   chatModel: text("chat_model"),
+  thinkingModelMode: text("thinking_model_mode").notNull().default("auto"), // auto | selected
+  thinkingProvider: text("thinking_provider"),
+  thinkingModel: text("thinking_model"),
   // ---- Master character voice (ONE locked voice identity across every response) ----
   masterVoiceEnabled: integer("master_voice_enabled", { mode: "boolean" }).notNull().default(true),
   masterGeminiVoice: text("master_gemini_voice").notNull().default("Leda"), // warm female prebuilt

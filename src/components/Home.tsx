@@ -26,7 +26,7 @@ type Character = {
 type Settings = {
   assistantName: string; wakeWord: string; userName: string; language: string; activeCharacterId: number | null;
   voiceEnabled: boolean; wakeWordEnabled: boolean; freeOnlyMode: boolean; lowPowerMode: boolean; routerMode: string; dailyBudgetUsd: number;
-  ttsProvider: string; ttsModel: string; ttsVoice: string;
+  ttsProvider: string; ttsModel: string; ttsVoice: string; thinkingModelMode: string; thinkingProvider: string | null; thinkingModel: string | null;
   renderMode?: string; lipSyncEnabled?: boolean;
 };
 type State = {
@@ -120,9 +120,15 @@ export default function Home() {
     fetch("/api/android/status").then((r) => r.json()).then(setAndroidStatus).catch(() => setAndroidStatus(null));
   }, [debug]);
 
+  const toastTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const pushToast = useCallback((id: string, text: string) => {
-    setToasts((t) => [...t, { id, text }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 12000);
+    const timer = toastTimersRef.current.get(id);
+    if (timer) clearTimeout(timer);
+    setToasts((current) => [...current.filter((item) => item.id !== id), { id, text }].slice(-3));
+    toastTimersRef.current.set(id, setTimeout(() => {
+      setToasts((current) => current.filter((item) => item.id !== id));
+      toastTimersRef.current.delete(id);
+    }, 5200));
   }, []);
 
   // `send` and `runAction` call each other (a screen reading feeds a follow-up turn), so the
@@ -141,9 +147,9 @@ export default function Home() {
     async (id: string, action: ClientAction) => {
       setActions((prev) => [...prev.slice(-7), { id, action, status: "running", detail: "", at: Date.now() }]);
       const r = await performAction(action, { confirm: askConfirm });
-      setActions((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, status: r.ok ? "done" : r.needsTap ? "pending" : "failed", detail: r.detail } : a)),
-      );
+      const nextStatus = r.ok ? "done" : r.needsTap ? "pending" : "failed";
+      setActions((prev) => prev.map((a) => (a.id === id ? { ...a, status: nextStatus, detail: r.detail } : a)));
+      if (r.ok) setTimeout(() => setActions((prev) => prev.filter((a) => a.id !== id)), 5000);
       // A screen reading is only useful once the assistant has spoken about it, so hand the
       // description straight back for one more turn. Depth-capped so it can't loop.
       if (action.kind === "capture_screen" && r.ok && followUpDepth.current === 0) {
@@ -166,6 +172,7 @@ export default function Home() {
     // This runs from a real click, so the popup blocker lets it through.
     const r = await performAction(a.action, { userInitiated: true });
     setActions((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: r.ok ? "done" : "failed", detail: r.detail } : x)));
+    if (r.ok) setTimeout(() => setActions((prev) => prev.filter((x) => x.id !== a.id)), 5000);
   }, []);
 
   // Proactive engine poll
@@ -386,7 +393,7 @@ export default function Home() {
       speechEndRef.current = 0; // consume it
       setLatency({ sttFinal });
       try {
-        const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: t, conversationId: convRef.current }), signal: ctl.signal });
+        const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: t, conversationId: convRef.current, selectedProvider: stateRef.current?.settings.thinkingModelMode === "selected" ? stateRef.current.settings.thinkingProvider : null, selectedModel: stateRef.current?.settings.thinkingModelMode === "selected" ? stateRef.current.settings.thinkingModel : null }), signal: ctl.signal });
         if (!res.ok || !res.body) throw new Error(`Chat is unavailable (${res.status}). Please try again.`);
         const reader = res.body.getReader();
         const dec = new TextDecoder();
@@ -418,7 +425,7 @@ export default function Home() {
             } else if (ev.type === "quota") {
               // Precise provider limit message (not a generic "failed").
               setProviderLimit(ev.message);
-              pushToast(`quota-${Date.now()}`, ev.message);
+              pushToast("quota", ev.message);
             } else if (ev.type === "action_step") {
               // Real agent step from the orchestrator — drives the character state machine + log.
               setAgentStep(ev.status as AgentStep);
@@ -774,7 +781,7 @@ export default function Home() {
       </section>
 
       {/* Toasts (proactive notifications) */}
-      <div className="pointer-events-none fixed right-4 top-4 z-50 flex w-80 flex-col gap-2">
+      <div aria-live="polite" className="pointer-events-none fixed right-3 top-3 z-50 flex max-h-[30vh] w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-1.5 overflow-hidden">
         {toasts.map((t) => (
           <div key={t.id} className="panel anim-fade-up pointer-events-auto flex items-start gap-2 p-3 text-sm">
             <span className="text-lg">{c.emoji}</span>

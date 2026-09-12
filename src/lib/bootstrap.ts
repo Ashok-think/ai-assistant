@@ -31,6 +31,9 @@ async function ensureTables() {
       chat_model_mode TEXT NOT NULL DEFAULT 'auto',
       chat_provider TEXT,
       chat_model TEXT,
+      thinking_model_mode TEXT NOT NULL DEFAULT 'auto',
+      thinking_provider TEXT,
+      thinking_model TEXT,
       openai_key TEXT,
       groq_key TEXT,
       openrouter_key TEXT,
@@ -189,7 +192,7 @@ async function migrate() {
     ["custom_key", "TEXT"], ["custom_base_url", "TEXT"], ["custom_model", "TEXT"],
     // Voice and model selection preferences
     ["tts_provider", "TEXT NOT NULL DEFAULT 'auto'"], ["tts_model", "TEXT NOT NULL DEFAULT 'fish-audio/s2.1-pro'"], ["tts_voice", "TEXT NOT NULL DEFAULT 'default'"],
-    ["chat_model_mode", "TEXT NOT NULL DEFAULT 'auto'"], ["chat_provider", "TEXT"], ["chat_model", "TEXT"],
+    ["chat_model_mode", "TEXT NOT NULL DEFAULT 'auto'"], ["chat_provider", "TEXT"], ["chat_model", "TEXT"], ["thinking_model_mode", "TEXT NOT NULL DEFAULT 'auto'"], ["thinking_provider", "TEXT"], ["thinking_model", "TEXT"],
     // Master character voice (one locked identity + emotion-as-delivery)
     ["master_voice_enabled", "INTEGER NOT NULL DEFAULT 1"],
     ["master_gemini_voice", "TEXT NOT NULL DEFAULT 'Leda'"],
