@@ -1,5 +1,6 @@
 import { getSettings } from "@/lib/bootstrap";
 import { buildCatalog } from "@/lib/router";
+import { getRecentTtsMetrics } from "@/lib/tts-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +94,7 @@ export async function GET() {
     checkedAt: new Date().toISOString(),
     anyConfigured: results.length > 0,
     results,
+    ttsMetrics: getRecentTtsMetrics(),
   });
 }
 

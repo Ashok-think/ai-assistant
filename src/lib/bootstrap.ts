@@ -28,6 +28,7 @@ async function ensureTables() {
       tts_provider TEXT NOT NULL DEFAULT 'auto',
       tts_model TEXT NOT NULL DEFAULT 'fish-audio/s2.1-pro',
       tts_voice TEXT NOT NULL DEFAULT 'default',
+      tts_policies TEXT NOT NULL DEFAULT '{}',
       chat_model_mode TEXT NOT NULL DEFAULT 'auto',
       chat_provider TEXT,
       chat_model TEXT,

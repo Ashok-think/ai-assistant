@@ -1,4 +1,5 @@
 import { getActiveCharacter, getSettings } from "@/lib/bootstrap";
+import { adaptivePenalty, getTtsPolicies, orderTtsProviders, recordTtsMetric, type TtsProvider } from "@/lib/tts-policy";
 import type { Emotion } from "@/lib/characters";
 import {
   CHARACTER_VOICES,
@@ -21,6 +22,7 @@ type Body = {
   emotion?: string;
   provider?: "gemini" | "elevenlabs" | "openrouter-fish";
   model?: string;
+  policies?: Record<string, { enabled?: boolean; priority?: number; timeoutMs?: number; streaming?: boolean }>;
   voice?: string;
 };
 
@@ -73,8 +75,11 @@ export async function POST(req: Request) {
       }
     : raw;
   const attempts: Attempt[] = [];
+  const startedAt = Date.now();
+  const policies = getTtsPolicies(body.policies ?? st.ttsPolicies);
 
-  // Respect the user's engine preference from Settings.
+  // Respect the user's engine preference from Settings, then softly prefer providers
+  // with better recent measured outcomes. Measurements are advisory, not guarantees.
   const pref = (st.ttsProvider ?? "auto") as "auto" | "gemini" | "elevenlabs" | "openrouter-fish" | "fish-audio" | "browser";
   let order: ("gemini" | "elevenlabs" | "openrouter-fish")[];
   if (body.provider) order = [body.provider];
@@ -83,6 +88,8 @@ export async function POST(req: Request) {
   else if (pref === "elevenlabs") order = ["elevenlabs", "openrouter-fish", "gemini"];
   else if (pref === "openrouter-fish" || pref === "fish-audio") order = ["openrouter-fish", "gemini", "elevenlabs"];
   else order = ["openrouter-fish", "gemini", "elevenlabs"];
+  const configured = orderTtsProviders(policies, body.provider ?? (pref === "auto" ? undefined : pref === "fish-audio" ? "openrouter-fish" : pref)) as TtsProvider[];
+  order = configured.filter((provider) => order.includes(provider)).sort((a, b) => (policies[a].priority + adaptivePenalty(a) / 10000) - (policies[b].priority + adaptivePenalty(b) / 10000)) as typeof order;
 
   for (const provider of order) {
     // ---- OpenRouter Fish Audio (OpenAI-compatible speech endpoint) ----
