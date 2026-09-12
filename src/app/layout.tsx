@@ -7,7 +7,7 @@ const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
 import "./globals.css";
 import Nav from "@/components/Nav";
 import ServiceWorker from "@/components/ServiceWorker";
-import { getSettings } from "@/lib/bootstrap";
+import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
@@ -30,18 +30,22 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: ReactNode }) {
   let name = "Companion";
   let lowPower = false;
-  try {
-    const st = await getSettings();
-    name = st.assistantName;
-    lowPower = st.lowPowerMode;
-  } catch {
-    /* db not ready */
+  const cloud = (await headers()).get("x-jarvish-cloud") === "1" || process.env.VERCEL === "1";
+  if (!cloud) {
+    try {
+      const { getSettings } = await import("@/lib/bootstrap");
+      const st = await getSettings();
+      name = st.assistantName;
+      lowPower = st.lowPowerMode;
+    } catch {
+      /* db not ready */
+    }
   }
   return (
     <html lang="en" className={`bg-background ${sans.variable} ${mono.variable}`}>
       <body className={`font-sans antialiased ${lowPower ? "low-power" : ""}`}>
         <ServiceWorker />
-        <Nav assistantName={name} />
+        <Nav assistantName={name} cloudOnly={process.env.VERCEL === "1"} />
         <main className="app-content">{children}</main>
       </body>
     </html>

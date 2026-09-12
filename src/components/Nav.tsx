@@ -14,13 +14,15 @@ const ITEMS = [
   { href: "/docs", label: "Help & setup", icon: CircleHelp },
 ];
 
-export default function Nav({ assistantName }: { assistantName?: string }) {
+export default function Nav({ assistantName, cloudOnly = false }: { assistantName?: string; cloudOnly?: boolean }) {
   const path = usePathname();
+  const cloudItem = { href: "/cloud", label: "Cloud workspace", icon: LayoutDashboard };
+  const items = cloudOnly ? [cloudItem] : [...ITEMS, cloudItem];
   return (
     <aside className="jarvish-rail">
       <Link href="/" className="rail-brand" aria-label="Jarvish home"><Sparkles size={24} strokeWidth={1.5} /></Link>
       <nav aria-label="Main navigation" className="rail-links">
-        {ITEMS.map(({ href, label, icon: Icon }) => (
+        {items.map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href} title={label} aria-label={label} aria-current={path === href ? "page" : undefined} className={`rail-link ${path === href ? "is-active" : ""}`}>
             <Icon size={21} strokeWidth={1.6} />
           </Link>

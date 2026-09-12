@@ -9,12 +9,15 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "smoke": "node scripts/smoke.mjs",
+    "test:cloud": "node --experimental-strip-types --test scripts/cloud-unit.test.mjs",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
     "@libsql/client": "^0.15.0",
+    "@supabase/ssr": "0.12.7",
+    "@supabase/supabase-js": "2.116.0",
     "ai": "^7.0.97",
     "dotenv": "17.3.1",
     "drizzle-orm": "0.45.2",
