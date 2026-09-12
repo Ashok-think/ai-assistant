@@ -24,6 +24,7 @@ type Body = {
   model?: string;
   policies?: Record<string, { enabled?: boolean; priority?: number; timeoutMs?: number; streaming?: boolean }>;
   voice?: string;
+  latencyTargetMs?: number;
 };
 
 type Attempt = { provider: string; status: string | number };
@@ -93,7 +94,8 @@ export async function POST(req: Request) {
 
   for (const provider of order) {
     const providerStartedAt = Date.now();
-    const timeoutMs = policies[provider]?.timeoutMs ?? 12000;
+    const configuredTimeout = Number(body.latencyTargetMs ?? st.apiLatencyTargetMs ?? policies[provider]?.timeoutMs ?? 12000);
+    const timeoutMs = Math.max(1000, Math.min(60000, configuredTimeout));
     const recordFailure = (status: string | number) => recordTtsMetric({ provider, ok: false, timeToFirstAudioMs: null, totalAudioLatencyMs: Date.now() - providerStartedAt, bytes: 0, error: String(status), measuredAt: new Date().toISOString() });
     // ---- OpenRouter Fish Audio (OpenAI-compatible speech endpoint) ----
     if (provider === "openrouter-fish") {

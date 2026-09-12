@@ -11,7 +11,7 @@ import { toSpeechText } from "./speech-text";
  *  The Flutter app swaps these for Porcupine/openWakeWord + Whisper + ElevenLabs streaming.
  */
 
-export type VoiceSettings = { pitch: number; rate: number; warmth: number; localVoiceName?: string; ttsProvider?: string; elevenLabsVoiceId?: string; geminiVoice?: string; ttsModel?: string; ttsVoice?: string; lang?: string };
+export type VoiceSettings = { pitch: number; rate: number; warmth: number; localVoiceName?: string; localLatencyTargetMs?: number; apiLatencyTargetMs?: number; ttsProvider?: string; elevenLabsVoiceId?: string; geminiVoice?: string; ttsModel?: string; ttsVoice?: string; lang?: string };
 
 type SR = {
   lang: string;
@@ -168,7 +168,7 @@ function emotionAdjust(emotion: string, v: VoiceSettings) {
 }
 
 /** Browser voices load asynchronously; on first paint getVoices() is often empty. */
-function ensureVoices(): Promise<SpeechSynthesisVoice[]> {
+function ensureVoices(maxWaitMs = 80): Promise<SpeechSynthesisVoice[]> {
   return new Promise((resolve) => {
     const have = window.speechSynthesis.getVoices();
     if (have.length) return resolve(have);
@@ -181,7 +181,7 @@ function ensureVoices(): Promise<SpeechSynthesisVoice[]> {
     window.speechSynthesis.onvoiceschanged = finish;
     // Safety net: some browsers never fire the event. Keep the fallback nearly immediate so
     // browser speech does not add noticeable silence after a reply.
-    setTimeout(finish, 80);
+    setTimeout(finish, Math.max(20, Math.min(1000, maxWaitMs)));
   });
 }
 
@@ -217,7 +217,7 @@ export async function speak(text: string, opts: { voice: VoiceSettings; emotion:
     const r = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: clean, voiceId: opts.voice.elevenLabsVoiceId, geminiVoice: opts.voice.geminiVoice, provider: opts.voice.ttsProvider, model: opts.voice.ttsModel, voice: opts.voice.ttsVoice, emotion: opts.emotion }),
+      body: JSON.stringify({ text: clean, voiceId: opts.voice.elevenLabsVoiceId, geminiVoice: opts.voice.geminiVoice, provider: opts.voice.ttsProvider, model: opts.voice.ttsModel, voice: opts.voice.ttsVoice, emotion: opts.emotion, latencyTargetMs: opts.voice.apiLatencyTargetMs }),
       signal: controller.signal,
     });
     if (canceled()) return;
@@ -264,7 +264,7 @@ export async function speak(text: string, opts: { voice: VoiceSettings; emotion:
   // 2) Browser speechSynthesis fallback
   if (canceled() || typeof window === "undefined" || !window.speechSynthesis) return;
   opts.onProvider?.("browser");
-  await ensureVoices(); // wait for the voice list so we don't speak silently on first load
+  await ensureVoices(opts.voice.localLatencyTargetMs); // bounded startup wait for the local voice list
   if (canceled()) return;
   await new Promise<void>((resolve) => {
     let finished = false;

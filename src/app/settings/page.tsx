@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 type Settings = {
   assistantName: string; wakeWord: string; userName: string; language: string; freeOnlyMode: boolean; safeMode: boolean; lowPowerMode: boolean;
   voiceEnabled: boolean; wakeWordEnabled: boolean; proactiveEnabled: boolean; dailyBudgetUsd: number; routerMode: string; ttsProvider: string; ttsModel: string; ttsVoice: string; chatModelMode: string; chatProvider: string | null; chatModel: string | null; thinkingModelMode: string; thinkingProvider: string | null; thinkingModel: string | null;
-  masterVoiceEnabled: boolean; masterGeminiVoice: string; masterElevenVoiceId: string | null; voiceSpeed: number; emotionIntensity: number;
+  masterVoiceEnabled: boolean; masterGeminiVoice: string; masterElevenVoiceId: string | null; voiceSpeed: number; emotionIntensity: number; localLatencyTargetMs: number; apiLatencyTargetMs: number;
   customVoiceStatus: string; renderMode: string; lipSyncEnabled: boolean;
   openaiKey: string; groqKey: string; openrouterKey: string; elevenLabsKey: string; ollamaUrl: string | null;
   geminiKey: string;
@@ -352,6 +352,15 @@ export default function SettingsPage() {
   <div className="grid gap-3 sm:grid-cols-2">
   <div><label className="label">Voice</label><select className="input" value={localVoiceName} onChange={(e) => { const name = e.target.value; setLocalVoiceName(name); window.localStorage.setItem("jarvish-local-voice", name); }}><option value="">Automatic best match</option>{localVoices.map((voice) => <option key={`${voice.name}-${voice.lang}`} value={voice.name}>{voice.name} · {voice.lang}</option>)}</select></div>
   <div><label className="label flex justify-between"><span>Local speed</span><span>{s.voiceSpeed.toFixed(2)}×</span></label><input aria-label="Local voice speed" type="range" min={0.5} max={1.5} step={0.05} className="w-full accent-cyan-400" value={s.voiceSpeed} onChange={(e) => patch({ voiceSpeed: Number(e.target.value) })} /></div>
+  </div>
+  <div className="mt-4 rounded-xl border border-amber-300/15 bg-amber-300/[0.04] p-3">
+    <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-amber-200">Voice latency targets</div>
+    <p className="mb-3 text-[11px] text-slate-400">These targets control how long each path may wait before falling back. Actual latency depends on your device, network, and provider.</p>
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div><label className="label flex justify-between"><span>Local voice</span><span>{s.localLatencyTargetMs} ms</span></label><input aria-label="Local voice latency" type="range" min={50} max={1000} step={25} className="w-full accent-cyan-400" value={s.localLatencyTargetMs} onChange={(e) => patch({ localLatencyTargetMs: Number(e.target.value) })} /><p className="mt-1 text-[10px] text-slate-500">Browser speech startup target</p></div>
+      <div><label className="label flex justify-between"><span>API voice</span><span>{(s.apiLatencyTargetMs / 1000).toFixed(1)} s</span></label><input aria-label="API voice latency" type="range" min={1000} max={60000} step={500} className="w-full accent-violet-400" value={s.apiLatencyTargetMs} onChange={(e) => patch({ apiLatencyTargetMs: Number(e.target.value) })} /><p className="mt-1 text-[10px] text-slate-500">Cloud TTS request timeout</p></div>
+    </div>
+    <button className="btn btn-ghost mt-3 text-xs" onClick={() => patch({ localLatencyTargetMs: 250, apiLatencyTargetMs: 12000 })}>Reset latency targets</button>
   </div>
   <button className="btn btn-ghost mt-3 text-xs" onClick={() => { const u = new SpeechSynthesisUtterance("Hi, this is your selected local browser voice."); const selected = localVoices.find((voice) => voice.name === localVoiceName); if (selected) u.voice = selected; u.rate = s.voiceSpeed; window.speechSynthesis.cancel(); window.speechSynthesis.speak(u); }}>Test local voice</button>
   </div>
