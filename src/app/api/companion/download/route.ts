@@ -28,9 +28,10 @@ export async function GET(request: Request) {
   const script = setupScript.replace("https://jarvish.vercel.app/cloud", cloudUrl);
   return new Response(script, {
     headers: {
-      "Content-Type": "application/octet-stream; charset=utf-8",
+      "Content-Type": "application/octet-stream",
       "Content-Disposition": 'attachment; filename="jarvish-windows-setup.ps1"',
       "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }
