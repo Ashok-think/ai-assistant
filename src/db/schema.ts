@@ -23,6 +23,8 @@ export const settings = sqliteTable("settings", {
   ttsModel: text("tts_model").notNull().default("fish-audio/s2.1-pro"),
   ttsVoice: text("tts_voice").notNull().default("default"),
   ttsPolicies: text("tts_policies", { mode: "json" }).$type<Record<string, { enabled: boolean; priority: number; timeoutMs: number; streaming: boolean }>>().notNull().default({}),
+  localLatencyTargetMs: integer("local_latency_target_ms").notNull().default(250),
+  apiLatencyTargetMs: integer("api_latency_target_ms").notNull().default(12000),
   chatModelMode: text("chat_model_mode").notNull().default("auto"), // auto | selected
   chatProvider: text("chat_provider"),
   chatModel: text("chat_model"),

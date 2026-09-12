@@ -8,7 +8,7 @@ import { ArrowUp, ArrowUpRight, AudioLines, ChevronDown, Mic, Paperclip, Plus, R
 import Waveform from "./Waveform";
 import ActionTimeline from "./ActionTimeline";
 import ToolConfirmation from "./ToolConfirmation";
-import { speak, stopSpeaking, type VoiceSettings } from "@/lib/voice-client";
+import { speak, stopSpeaking, setSpeechBargeInHandler, type VoiceSettings } from "@/lib/voice-client";
 import { useVoiceSession } from "./useVoiceSession";
 import VoiceDiagnostics from "./VoiceDiagnostics";
 import { performAction, type ActionState } from "@/lib/client-actions";
@@ -26,7 +26,7 @@ type Character = {
 type Settings = {
   assistantName: string; wakeWord: string; userName: string; language: string; activeCharacterId: number | null;
   voiceEnabled: boolean; wakeWordEnabled: boolean; freeOnlyMode: boolean; lowPowerMode: boolean; routerMode: string; dailyBudgetUsd: number;
-  ttsProvider: string; ttsModel: string; ttsVoice: string; voiceSpeed?: number; chatModelMode: string; chatProvider: string | null; chatModel: string | null; thinkingModelMode: string; thinkingProvider: string | null; thinkingModel: string | null;
+  ttsProvider: string; ttsModel: string; ttsVoice: string; voiceSpeed?: number; localLatencyTargetMs?: number; apiLatencyTargetMs?: number; chatModelMode: string; chatProvider: string | null; chatModel: string | null; thinkingModelMode: string; thinkingProvider: string | null; thinkingModel: string | null;
   renderMode?: string; lipSyncEnabled?: boolean;
 };
 type State = {
@@ -73,6 +73,8 @@ export default function Home() {
   const [toasts, setToasts] = useState<{ id: string; text: string }[]>([]);
   const [voiceOn, setVoiceOn] = useState(true);
   const speakingRef = useRef(false); // true while TTS is playing — enables barge-in detection
+  const lastSpokenRef = useRef("");
+  const voiceCaptureMuteUntilRef = useRef(0);
   const [showChars, setShowChars] = useState(false);
   const [debug, setDebug] = useState(false);
   const [browserStatus, setBrowserStatus] = useState<{ enabled: boolean; playwrightInstalled: boolean; running: boolean; ready: boolean } | null>(null);
@@ -88,6 +90,7 @@ export default function Home() {
   const convRef = useRef<number | null>(null);
   const busyRef = useRef(false);
   const chatAbortRef = useRef<AbortController | null>(null);
+  const responseGenerationRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const seenRef = useRef<Set<string>>(new Set());
@@ -156,7 +159,12 @@ export default function Home() {
   /** Perform one server-issued action in the browser and record how it went. */
   const runAction = useCallback(
     async (id: string, action: ClientAction) => {
-      setActions((prev) => [...prev.slice(-7), { id, action, status: "running", detail: "", at: Date.now() }]);
+      setActions((prev) => {
+        const signature = JSON.stringify(action);
+        const duplicate = prev.find((item) => JSON.stringify(item.action) === signature && Date.now() - item.at < 15000);
+        if (duplicate) return prev.map((item) => item.id === duplicate.id ? { ...item, status: "running", detail: "", at: Date.now() } : item);
+        return [...prev.slice(-7), { id, action, status: "running", detail: "", at: Date.now() }];
+      });
       const r = await performAction(action, { confirm: askConfirm });
       const nextStatus = r.ok ? "done" : r.needsTap ? "pending" : "failed";
       setActions((prev) => prev.map((a) => (a.id === id ? { ...a, status: nextStatus, detail: r.detail } : a)));
@@ -183,8 +191,9 @@ export default function Home() {
     // This runs from a real click, so the popup blocker lets it through.
     const r = await performAction(a.action, { userInitiated: true });
     setActions((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: r.ok ? "done" : "failed", detail: r.detail } : x)));
-    if (r.ok) setTimeout(() => setActions((prev) => prev.filter((x) => x.id !== a.id)), 5000);
-  }, []);
+      if (r.ok) setTimeout(() => setActions((prev) => prev.filter((x) => x.id !== a.id)), 5000);
+      else if (/blocked|pairing|authentication|not configured|not available/i.test(r.detail)) pushToast(`action-${a.id}`, r.detail);
+  }, [pushToast]);
 
   // Proactive engine poll
   useEffect(() => {
@@ -198,7 +207,7 @@ export default function Home() {
           pushToast(it.id, it.text);
           if (it.speak && voiceOn && stateRef.current) {
             setEmotion("excited");
-            speak(it.text, { voice: { ...stateRef.current.character.voice, rate: (stateRef.current.character.voice.rate ?? 1) * (stateRef.current.settings.voiceSpeed ?? 1), localVoiceName: typeof window !== "undefined" ? window.localStorage.getItem("jarvish-local-voice") ?? undefined : undefined }, emotion: "excited", lang: stateRef.current.settings.language, onStart: () => setTalking(true), onEnd: () => setTalking(false), onMouth: setMouth });
+            speak(it.text, { voice: { ...stateRef.current.character.voice, rate: (stateRef.current.character.voice.rate ?? 1) * (stateRef.current.settings.voiceSpeed ?? 1), localVoiceName: typeof window !== "undefined" ? window.localStorage.getItem("jarvish-local-voice") ?? undefined : undefined, localLatencyTargetMs: stateRef.current.settings.localLatencyTargetMs, apiLatencyTargetMs: stateRef.current.settings.apiLatencyTargetMs }, emotion: "excited", lang: stateRef.current.settings.language, onStart: () => setTalking(true), onEnd: () => setTalking(false), onMouth: setMouth });
           }
         }
       } catch {
@@ -220,8 +229,10 @@ export default function Home() {
       // start talking). The onresult handler detects speech and interrupts. speakingRef tells that
       // handler to treat input as a barge-in (and it ignores very short/echo-like fragments).
       speakingRef.current = true;
+      lastSpokenRef.current = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      voiceCaptureMuteUntilRef.current = Date.now() + Math.max(800, Math.min(8000, text.length * 45));
       await speak(text, {
-        voice: { ...s.character.voice, rate: (s.character.voice.rate ?? 1) * (s.settings.voiceSpeed ?? 1), localVoiceName: typeof window !== "undefined" ? window.localStorage.getItem("jarvish-local-voice") ?? undefined : undefined, ttsProvider: s.settings.ttsProvider, ttsModel: s.settings.ttsModel, ttsVoice: s.settings.ttsVoice }, emotion: emo, lang: s.settings.language,
+        voice: { ...s.character.voice, rate: (s.character.voice.rate ?? 1) * (s.settings.voiceSpeed ?? 1), localVoiceName: typeof window !== "undefined" ? window.localStorage.getItem("jarvish-local-voice") ?? undefined : undefined, localLatencyTargetMs: s.settings.localLatencyTargetMs, apiLatencyTargetMs: s.settings.apiLatencyTargetMs, ttsProvider: s.settings.ttsProvider, ttsModel: s.settings.ttsModel, ttsVoice: s.settings.ttsVoice }, emotion: emo, lang: s.settings.language,
         onStart: () => { setTalking(true); if (reqStart) setLatency((l) => ({ ...(l ?? {}), firstAudio: Math.round(performance.now() - reqStart) })); },
         onEnd: () => setTalking(false), onMouth: setMouth,
         onProvider: (p) => { setLastTtsProvider(p); if (p !== "browser") setTtsFallbackReason(""); },
@@ -409,6 +420,7 @@ export default function Home() {
       // follow-up turn (screen reading) would deadlock against `busy`.
       const queued: { id: string; action: ClientAction }[] = [];
       const ctl = new AbortController();
+      const responseGeneration = ++responseGenerationRef.current;
       chatAbortRef.current = ctl;
       // Latency instrumentation (real perf-clock timestamps for the debug panel).
       const reqStart = performance.now();
@@ -429,6 +441,7 @@ export default function Home() {
           const parts = buf.split("\n\n");
           buf = parts.pop() ?? "";
           for (const p of parts) {
+            if (responseGeneration !== responseGenerationRef.current || ctl.signal.aborted) return;
             if (!p.startsWith("data: ")) continue;
             const ev = JSON.parse(p.slice(6));
             if (ev.type === "route") {
@@ -514,14 +527,33 @@ export default function Home() {
   );
   sendRef.current = send;
 
+  useEffect(() => {
+    return () => setSpeechBargeInHandler(null);
+  }, []);
+
+  setSpeechBargeInHandler(() => {
+    responseGenerationRef.current += 1;
+    chatAbortRef.current?.abort();
+    stopSpeaking();
+  });
+
   const { voice, micLevel, tone, startListening, stopListening } = useVoiceSession({
     phrase: state?.settings.wakeWord || "nova",
     language: state?.settings.language || "auto",
-    onCommand: (command) => {
-      speechEndRef.current = performance.now();
-      void sendRef.current?.(correctTranscript(command));
-    },
+      onCommand: (command) => {
+        if (Date.now() < voiceCaptureMuteUntilRef.current) return;
+        const normalized = correctTranscript(command).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+        const spoken = lastSpokenRef.current;
+        if (spoken && normalized.length >= 8 && (spoken.includes(normalized) || normalized.includes(spoken))) {
+          lastSpokenRef.current = "";
+          return;
+        }
+        speechEndRef.current = performance.now();
+        void sendRef.current?.(correctTranscript(command));
+      },
     onInterrupt: () => {
+      responseGenerationRef.current += 1;
+      chatAbortRef.current?.abort();
       stopSpeaking();
       speakingRef.current = false;
       setTalking(false);
@@ -654,7 +686,7 @@ export default function Home() {
               </div>
             ) : (
               <p className="mt-2 text-[11px] text-slate-500">
-                {state.online ? `Auto-routes each message: quick chat → fast model, hard tasks → smart model.` : "No API key yet — running the built-in offline persona engine. Add a free Groq key in Settings for the full brain."}
+                {state.online ? `Auto-routes each message: quick chat → fast model, hard tasks → smart model.` : "No API key yet ��� running the built-in offline persona engine. Add a free Groq key in Settings for the full brain."}
               </p>
             )}
           </div>

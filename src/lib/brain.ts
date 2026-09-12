@@ -123,6 +123,7 @@ export async function* think(opts: {
   let tokensIn = 0;
   let tokensOut = 0;
   const toolLog: ToolCallLog[] = [];
+  let browserBlocked = false;
 
   const msgs: ChatMessage[] = [
     { role: "system", content: systemPrompt },
@@ -195,17 +196,25 @@ export async function* think(opts: {
             const run = await runTool(tc.function.name, args);
             toolLog.push({ name: tc.function.name, args, result: run.text });
             yield { type: "tool", name: tc.function.name, args, result: run.text };
+            // A missing companion/browser session is not recoverable by repeating the same
+            // server-side tool. Stop the tool loop so the assistant reports one truthful result.
+            if (tc.function.name.startsWith("pc_") && /blocked|pairing|authentication|not available|not configured|cannot control/i.test(run.text)) {
+              browserBlocked = true;
+              finalText = `I can’t control your computer from this cloud session. ${run.text.replace(/^(Could not|YouTube search failed|Google search failed)[^:]*:\s*/i, "")}`;
+              break;
+            }
             if (run.action) {
               yield { type: "action", id: nextActionId(), action: run.action };
               yield { type: "action_step", step: run.action.label, status: "verifying" };
             }
             msgs.push({ role: "tool", tool_call_id: tc.id, content: run.text });
           }
+          if (browserBlocked) break;
           continue;
         }
         break;
       }
-      finalText = parts.join("\n\n");
+      if (!browserBlocked) finalText = parts.join("\n\n");
       if (!finalText) finalText = "[thinking] I got a little tangled up there. Can you say that again?";
       break;
     } catch (e) {

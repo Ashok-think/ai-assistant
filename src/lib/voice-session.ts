@@ -180,7 +180,14 @@ export class VoiceSession {
       const remaining = result.final.startsWith(consumed) ? result.final.slice(consumed.length).trim() : result.final;
       const wake = matchesWake(remaining, phrase);
       const stop = /^(stop|cancel|quiet|shush|enough|be quiet)[.!?]*$/i.test(remaining);
-      // Interim hypotheses may be revised; only final wake/stop evidence can interrupt work.
+      // A meaningful final utterance is a barge-in even without a wake word. This lets users
+      // correct a pending request naturally: “not Paradise, play Hi Nana instead.”
+      const spokenCorrection = Boolean(result.final.trim()) && result.final.trim().length >= 2;
+      if (this.options.isOccupied() && spokenCorrection && !interrupted) {
+        interrupted = true;
+        this.options.onInterrupt();
+        this.update({ phase: capturing() ? "capturing" : "wake-listening", command: result.final.trim() });
+      }
       if (this.options.isOccupied() && !wake.hit && !stop && !interrupted) { consumed = result.final; final = ""; this.clear(this.silence); return; }
       if ((wake.hit || stop) && !interrupted) { interrupted = true; this.options.onInterrupt(); }
       if (!current()) return;

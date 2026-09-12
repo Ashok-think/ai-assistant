@@ -175,7 +175,8 @@ async function respond(c: CharacterLike, message: string, userName: string, sink
     return { text: say(`On it, {nick}. ${r}`, "happy"), toolCalls: calls };
   }
   // --- Play / watch something on YouTube ---
-  const play = m.match(/^(?:play|watch|find)\s+(?:me\s+)?(.+?)(?:\s+on\s+youtube)?[.!?]?$/i);
+  const correctedPlay = m.match(/^(?:not|no)\s+.+?,?\s*(?:play|watch)\s+(?:me\s+)?(.+?)(?:\s+on\s+youtube)?[.!?]?$/i);
+  const play = correctedPlay ?? m.match(/^(?:play|watch|find)\s+(?:me\s+)?(.+?)(?:\s+on\s+youtube)?[.!?]?$/i);
   if (play && /youtube|song|video|trailer|music|episode/i.test(lower)) {
     const q = play[1].replace(/\bon youtube\b/i, "").replace(/\b(?:a|some)\s+song\b/i, "song").trim();
     const r = await call("search_youtube", { query: q });
@@ -226,8 +227,8 @@ async function respond(c: CharacterLike, message: string, userName: string, sink
     lang === "hi"
       ? `Hmm, {nick}, offline mode me main itna deep nahi ja sakta. Settings me ek free Groq key daal do, phir main sab kuch kar dunga!`
       : pick([
-          `Hmm, {nick}, I'm in offline mode right now so I can't go deep on that. Add a free Groq or OpenAI key in Settings and I'll unlock my full brain!`,
-          `I hear you, {nick}. Offline me can handle weather, reminders, todos, notes, search, translate and moods. For the big-brain stuff, drop an API key in Settings.`,
+          `I can handle that when a text model is available, {nick}. Right now I’m in local fallback mode, so I won’t pretend I completed it.`,
+          `I’m in local fallback mode, {nick}. I can still handle weather, reminders, todos, notes, search, translate and moods, but I can’t verify that request yet.`,
         ]);
   return { text: say(fallback, "thinking"), toolCalls: calls };
 }
