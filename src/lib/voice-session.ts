@@ -174,7 +174,6 @@ export class VoiceSession {
       if ((wake.hit || stop) && !interrupted) { interrupted = true; this.options.onInterrupt(); }
       if (!current()) return;
       if (stop) { this.awakeUntil = this.now() + 1000; final = "stop"; submit(); return; }
-      final = remaining;
       if (mode === "wake" && wake.hit && !this.awakeUntil) {
         this.awakeUntil = this.now() + 8000;
         this.later(() => {
@@ -189,6 +188,14 @@ export class VoiceSession {
           }
         }, 8000);
       }
+      // Saying only the wake word arms the next utterance; do not submit an empty command.
+      if (mode === "wake" && wake.hit && !wake.rest) {
+        final = "";
+        this.update({ phase: "capturing", command: "Listening for your request…" });
+        this.clear(this.silence);
+        return;
+      }
+      final = remaining;
       const shown = command(final);
       this.update({ phase: capturing() ? "capturing" : "wake-listening", command: capturing() ? [shown, result.interim].filter(Boolean).join(" ") : "" });
       this.clear(this.silence);
