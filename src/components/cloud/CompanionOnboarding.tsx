@@ -30,9 +30,9 @@ export default function CompanionOnboarding() {
           <div className="max-w-2xl">
             <div className="mb-3 flex items-center gap-2 font-mono text-xs uppercase tracking-[0.18em] text-primary"><Laptop size={15} /> Windows companion</div>
             <h2 className="text-balance text-2xl font-semibold md:text-3xl">Make Jarvish useful on your computer.</h2>
-            <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">The web app can chat and search safely. The Windows companion adds local microphone, browser, screen, and file actions without giving Jarvish unlimited access.</p>
+            <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">Start in the browser with no commands or installation. Chat, research, YouTube discovery, voice, memory, exports, and settings are ready now. Download the Windows companion only when you want local microphone, screen, browser, and file actions.</p>
           </div>
-          <div className="flex items-center gap-2 rounded-full border border-primary/25 px-3 py-1.5 text-xs text-primary"><Wifi size={14} /> Web demo ready</div>
+          <div className="flex items-center gap-2 rounded-full border border-emerald-400/25 px-3 py-1.5 text-xs text-emerald-300"><Wifi size={14} /> Web ready — no install</div>
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
           <a className="btn btn-primary" href="/download"><Download size={16} />Download for Windows</a>
