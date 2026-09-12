@@ -8,7 +8,7 @@ import { ArrowUp, ArrowUpRight, AudioLines, ChevronDown, Mic, Paperclip, Plus, R
 import Waveform from "./Waveform";
 import ActionTimeline from "./ActionTimeline";
 import ToolConfirmation from "./ToolConfirmation";
-import { speak, stopSpeaking, setSpeechBargeInHandler, type VoiceSettings } from "@/lib/voice-client";
+import { speak, stopSpeaking, type VoiceSettings } from "@/lib/voice-client";
 import { useVoiceSession } from "./useVoiceSession";
 import VoiceDiagnostics from "./VoiceDiagnostics";
 import { performAction, type ActionState } from "@/lib/client-actions";
@@ -527,15 +527,6 @@ export default function Home() {
   );
   sendRef.current = send;
 
-  useEffect(() => {
-    return () => setSpeechBargeInHandler(null);
-  }, []);
-
-  setSpeechBargeInHandler(() => {
-    responseGenerationRef.current += 1;
-    chatAbortRef.current?.abort();
-    stopSpeaking();
-  });
 
   const { voice, micLevel, tone, startListening, stopListening } = useVoiceSession({
     phrase: state?.settings.wakeWord || "nova",

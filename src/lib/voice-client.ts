@@ -65,11 +65,6 @@ export { matchesWake, normalizeHeard } from "./voice-session";
 let speechGeneration = 0;
 let speechRequest: AbortController | null = null;
 let finishPlayback: (() => void) | null = null;
-let onSpeechBargeIn: (() => void) | null = null;
-
-export function setSpeechBargeInHandler(handler: (() => void) | null) {
-  onSpeechBargeIn = handler;
-}
 let currentAudio: HTMLAudioElement | null = null;
 let currentUtterance: SpeechSynthesisUtterance | null = null;
 let mouthRaf = 0;
