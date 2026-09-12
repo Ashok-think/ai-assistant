@@ -166,6 +166,7 @@ export class VoiceSession {
       // Interim hypotheses may be revised; only final wake/stop evidence can interrupt work.
       if (this.options.isOccupied() && !wake.hit && !stop && !interrupted) { consumed = result.final; final = ""; this.clear(this.silence); return; }
       if ((wake.hit || stop) && !interrupted) { interrupted = true; this.options.onInterrupt(); }
+      if (!current()) return;
       if (stop) { this.awakeUntil = this.now() + 1000; final = "stop"; submit(); return; }
       final = remaining;
       if (mode === "wake" && wake.hit && !this.awakeUntil) {
@@ -173,7 +174,10 @@ export class VoiceSession {
         this.later(() => {
           if (this.awakeUntil && this.awakeUntil <= this.now()) {
             this.awakeUntil = 0;
-            this.clear(this.silence);
+            // Expiry can race an onend restart. Cancel that restart before opening a new recognizer.
+            this.timers.forEach((timer) => (this.options.clearTimer ?? clearTimeout)(timer));
+            this.timers.clear();
+            this.silence = null;
             this.detach();
             if (mode === "wake") this.open();
           }
@@ -198,7 +202,7 @@ export class VoiceSession {
       if (!failure) submit();
       if (!current()) return;
       this.detach();
-      if (mode === "once") { this.stop(); return; }
+      if (mode === "once") { if (failure === "network") this.fail(failure); else this.stop(); return; }
       this.retries = hadResults && !failure ? 0 : this.retries + 1;
       if (this.retries > 4) { this.fail(failure || "repeated-session-end"); return; }
       this.update({ phase: "restarting", command: "" });
