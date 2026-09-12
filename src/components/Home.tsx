@@ -161,8 +161,8 @@ export default function Home() {
     async (id: string, action: ClientAction) => {
       setActions((prev) => {
         const signature = JSON.stringify(action);
-        const duplicate = prev.find((item) => JSON.stringify(item.action) === signature && Date.now() - item.at < 15000);
-        if (duplicate) return prev.map((item) => item.id === duplicate.id ? { ...item, status: "running", detail: "", at: Date.now() } : item);
+        const duplicate = prev.some((item) => JSON.stringify(item.action) === signature && Date.now() - item.at < 15000);
+        if (duplicate) return prev;
         return [...prev.slice(-7), { id, action, status: "running", detail: "", at: Date.now() }];
       });
       const r = await performAction(action, { confirm: askConfirm });

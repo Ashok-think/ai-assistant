@@ -11,6 +11,7 @@
 
 export type ClientAction =
   | { kind: "open_url"; url: string; label: string }
+  | { kind: "youtube_search"; query: string; label: string }
   | { kind: "compose_message"; app: MessageApp; to: string; text: string; url: string; label: string }
   | { kind: "capture_screen"; question: string; label: string }
   | { kind: "clipboard"; text: string; label: string }

@@ -200,7 +200,15 @@ export async function* think(opts: {
             // server-side tool. Stop the tool loop so the assistant reports one truthful result.
             if (tc.function.name.startsWith("pc_") && /blocked|pairing|authentication|not available|not configured|cannot control/i.test(run.text)) {
               browserBlocked = true;
-              finalText = `I can’t control your computer from this cloud session. ${run.text.replace(/^(Could not|YouTube search failed|Google search failed)[^:]*:\s*/i, "")}`;
+              if (tc.function.name === "pc_youtube_search" || tc.function.name === "search_youtube") {
+                const query = typeof args.query === "string" ? args.query : "latest song";
+                const action: ClientAction = { kind: "youtube_search", query, label: `Search YouTube for ${query}` };
+                yield { type: "action", id: nextActionId(), action };
+                yield { type: "action_step", step: action.label, status: "executing" };
+                finalText = `I opened YouTube search for “${query}”. Choose the matching result and press play.`;
+              } else {
+                finalText = `I can’t control your computer from this cloud session. ${run.text.replace(/^(Could not|YouTube search failed|Google search failed)[^:]*:\s*/i, "")}`;
+              }
               break;
             }
             if (run.action) {

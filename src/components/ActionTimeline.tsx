@@ -6,6 +6,7 @@ import type { ActionState } from "@/lib/client-actions";
 
 const ICON: Record<ActionState["action"]["kind"], typeof Globe2> = {
   open_url: Globe2,
+  youtube_search: Search,
   compose_message: Mail,
   capture_screen: Monitor,
   clipboard: MousePointer2,
