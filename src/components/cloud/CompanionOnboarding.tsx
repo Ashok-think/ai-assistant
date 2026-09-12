@@ -51,7 +51,7 @@ export default function CompanionOnboarding() {
           <div className="flex items-center gap-2 rounded-full border border-primary/25 px-3 py-1.5 text-xs text-primary"><Wifi size={14} /> Web demo ready</div>
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
-          <button className="btn btn-primary" disabled={downloading} onClick={downloadWindowsSetup}><Download size={16} />{downloading ? "Preparing…" : "Download for Windows"}</button>
+          <a className="btn btn-primary" href="/download"><Download size={16} />Download for Windows</a>
           <button className="btn btn-ghost" onClick={() => setNotice("Android support is planned after the Windows companion foundation.")}><Smartphone size={16} />Android later</button>
         </div>
         {notice && <p role="status" className="mt-4 text-sm text-primary">{notice}</p>}
