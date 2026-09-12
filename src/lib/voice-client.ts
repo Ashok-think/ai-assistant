@@ -5,8 +5,8 @@ import { toSpeechText } from "./speech-text";
 /**
  * VOICE PIPELINE (web companion)
  *  wake word → STT (Web Speech API, streaming interim results) → /api/chat → TTS
- *  TTS: /api/tts (Gemini TTS → ElevenLabs, emotion-aware) → fallback to browser
- *       speechSynthesis with per-character pitch/rate.
+ *  TTS: browser speechSynthesis (local-first) → /api/tts cloud fallback.
+ *       Local speech uses per-character pitch/rate; cloud TTS remains available when no browser voice exists.
  *  Interrupt: calling stopSpeaking() at any time (e.g., when the user starts talking) cuts audio.
  *  The Flutter app swaps these for Porcupine/openWakeWord + Whisper + ElevenLabs streaming.
  */
@@ -201,8 +201,10 @@ export async function speak(text: string, opts: { voice: VoiceSettings; emotion:
   const clean = toSpeechText(text);
   if (!clean) return;
 
-  // 1) Server TTS (Gemini → ElevenLabs). 204 means no provider configured.
-  try {
+  // Prefer the device's local browser voice. This avoids cloud/bot voices and starts speaking
+  // immediately; the server TTS route remains available for environments without speech synthesis.
+  const preferLocalVoice = typeof window !== "undefined" && "speechSynthesis" in window;
+  if (!preferLocalVoice) try {
     const r = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
