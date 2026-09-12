@@ -67,6 +67,7 @@ export default function Home() {
   const [agentStep, setAgentStep] = useState<AgentStep | null>(null);
   const [agentTool, setAgentTool] = useState<string | null>(null);
   const [agentLog, setAgentLog] = useState<AgentLogEntry[]>([]);
+  const [activityOpen, setActivityOpen] = useState(false);
 
   const [route, setRoute] = useState<RouteInfo | null>(null);
   const [toasts, setToasts] = useState<{ id: string; text: string }[]>([]);
@@ -287,7 +288,7 @@ export default function Home() {
         r.onerror = () => rej(new Error("read failed"));
         r.readAsDataURL(file);
       });
-      setMsgs((m) => [...m, { id: `u-${Date.now()}`, role: "user", content: `🖼️ ${file.name} — ${question}` }]);
+      setMsgs((m) => [...m, { id: `u-${Date.now()}`, role: "user", content: `🖼️ ${file.name} ��� ${question}` }]);
       const pendingId = `img-${Date.now()}`;
       setMsgs((m) => [...m, { id: pendingId, role: "assistant", content: "", pending: true }]);
       setBusy(true);
@@ -766,23 +767,20 @@ export default function Home() {
         </div>
 
         {agentLog.length > 0 && (
-          <div className="mt-3 rounded-2xl border border-violet-400/20 bg-violet-400/[0.04] p-2.5">
-            <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-violet-300/80">
-              <span>Agent activity</span>
+          <details className="mt-3 rounded-2xl border border-violet-400/20 bg-violet-400/[0.04]" open={activityOpen} onToggle={(event) => setActivityOpen(event.currentTarget.open)}>
+            <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 text-[10px] uppercase tracking-[0.2em] text-violet-300/80 [&::-webkit-details-marker]:hidden">
+              <span className="flex items-center gap-2"><ChevronDown size={13} className={`transition-transform ${activityOpen ? "rotate-180" : ""}`} /> Agent activity</span>
               <span className="text-slate-500">{agentLog.filter((a) => a.status === "done").length}/{agentLog.length}</span>
-            </div>
-            <ul className="space-y-1">
+            </summary>
+            <ul className="space-y-1 border-t border-violet-400/10 px-3 py-2.5">
               {agentLog.map((a) => (
                 <li key={a.id} className="anim-fade-up flex items-start gap-2 text-xs">
                   <span className={`mt-0.5 ${a.status === "failed" ? "text-rose-300" : a.status === "running" ? "text-cyan-300 animate-pulse" : "text-emerald-300"}`}>{a.icon}</span>
-                  <div className="min-w-0 flex-1">
-                    <span className="font-mono text-[11px] text-slate-200">{a.text}</span>
-                    {a.detail && <p className={`break-words ${a.status === "failed" ? "text-rose-300/80" : "text-slate-400"}`}>{a.detail}</p>}
-                  </div>
+                  <div className="min-w-0 flex-1"><span className="font-mono text-[11px] text-slate-200">{a.text}</span>{a.detail && <p className={`break-words ${a.status === "failed" ? "text-rose-300/80" : "text-slate-400"}`}>{a.detail}</p>}</div>
                 </li>
               ))}
             </ul>
-          </div>
+          </details>
         )}
 
         <ActionTimeline actions={actions} onRetry={retryAction} onDismiss={(id) => setActions((a) => a.filter((x) => x.id !== id))} />

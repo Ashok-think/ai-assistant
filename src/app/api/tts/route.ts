@@ -96,7 +96,7 @@ export async function POST(req: Request) {
           method: "POST",
           headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "HTTP-Referer": new URL(req.url).origin, "X-Title": "JARVISH" },
           body: JSON.stringify({ model, input: clean, ...(voice && voice !== "default" ? { voice } : {}), response_format: "mp3" }),
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(12000),
         });
         if (!r.ok) { attempts.push({ provider, status: r.status }); continue; }
         const bytes = new Uint8Array(await r.arrayBuffer());
@@ -132,7 +132,7 @@ export async function POST(req: Request) {
                 speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
               },
             }),
-            signal: AbortSignal.timeout(30000),
+            signal: AbortSignal.timeout(12000),
           },
         );
         if (!r.ok) {
@@ -186,7 +186,7 @@ export async function POST(req: Request) {
             use_speaker_boost: true,
           },
         }),
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(12000),
       });
       if (!r.ok) {
         attempts.push({ provider, status: r.status });

@@ -174,9 +174,9 @@ function ensureVoices(): Promise<SpeechSynthesisVoice[]> {
       resolve(window.speechSynthesis.getVoices());
     };
     window.speechSynthesis.onvoiceschanged = finish;
-    // Safety net: some browsers never fire the event. Kept short so browser-fallback speech isn't
-    // delayed — voices almost always load in <250ms, and `finish` fires the instant they're ready.
-    setTimeout(finish, 250);
+    // Safety net: some browsers never fire the event. Keep the fallback nearly immediate so
+    // browser speech does not add noticeable silence after a reply.
+    setTimeout(finish, 80);
   });
 }
 
