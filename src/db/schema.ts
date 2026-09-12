@@ -22,6 +22,7 @@ export const settings = sqliteTable("settings", {
   ttsProvider: text("tts_provider").notNull().default("auto"),
   ttsModel: text("tts_model").notNull().default("fish-audio/s2.1-pro"),
   ttsVoice: text("tts_voice").notNull().default("default"),
+  ttsPolicies: text("tts_policies", { mode: "json" }).$type<Record<string, { enabled: boolean; priority: number; timeoutMs: number; streaming: boolean }>>().notNull().default({}),
   chatModelMode: text("chat_model_mode").notNull().default("auto"), // auto | selected
   chatProvider: text("chat_provider"),
   chatModel: text("chat_model"),
