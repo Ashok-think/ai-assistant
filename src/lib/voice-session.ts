@@ -17,18 +17,8 @@ export const normalizeHeard = (text: string) => text.toLowerCase().replace(/[^\p
 export function matchesWake(heard: string, phrase: string): { hit: boolean; rest: string } {
   const tokens = [...heard.matchAll(/[\p{L}\p{N}]+/gu)];
   const wake = normalizeHeard(phrase) || "nova";
-  const configuredVariants = [wake, wake.replace(/^hey\s+/u, "okay "), wake.replace(/^hey\s+/u, "ok ")];
-  const variants = Array.from(new Set([
-    ...configuredVariants,
-    "nova",
-    "hey nova",
-    "okay nova",
-    "ok nova",
-    "hey rio",
-    "hey reo",
-    "hey ryo",
-    "hey jarvis",
-  ]));
+    const configuredVariants = phrase.trim() ? [wake, wake.replace(/^hey\s+/u, "okay "), wake.replace(/^hey\s+/u, "ok ")] : ["nova", "hey nova", "okay nova", "ok nova", "hey rio", "hey reo", "hey ryo", "hey jarvis"];
+  const variants = Array.from(new Set(configuredVariants));
   for (let i = 0; i < tokens.length; i++) {
     for (const variant of variants) {
       const words = variant.split(" ");
@@ -179,15 +169,7 @@ export class VoiceSession {
       this.update({ heard });
       const remaining = result.final.startsWith(consumed) ? result.final.slice(consumed.length).trim() : result.final;
       const wake = matchesWake(remaining, phrase);
-      const stop = /^(stop|cancel|quiet|shush|enough|be quiet)[.!?]*$/i.test(remaining);
-      // A meaningful final utterance is a barge-in even without a wake word. This lets users
-      // correct a pending request naturally: “not Paradise, play Hi Nana instead.”
-      const spokenCorrection = Boolean(result.final.trim()) && result.final.trim().length >= 2;
-      if (this.options.isOccupied() && spokenCorrection && !interrupted) {
-        interrupted = true;
-        this.options.onInterrupt();
-        this.update({ phase: capturing() ? "capturing" : "wake-listening", command: result.final.trim() });
-      }
+      const stop = /(?:^|\s)(stop|cancel|quiet|shush|enough|be quiet)[.!?]*(?:$|\s)/i.test(remaining);
       if (this.options.isOccupied() && !wake.hit && !stop && !interrupted) { consumed = result.final; final = ""; this.clear(this.silence); return; }
       if ((wake.hit || stop) && !interrupted) { interrupted = true; this.options.onInterrupt(); }
       if (!current()) return;
@@ -237,6 +219,7 @@ export class VoiceSession {
       if (!current()) return;
       this.detach();
       if (mode === "once") { if (failure === "network") this.fail(failure); else this.stop("idle"); return; }
+      if (this.retries >= 4) { this.fail(failure || "repeated-session-end"); return; }
       this.retries = hadResults && !failure ? 0 : this.retries + 1;
       // Wake mode is intentionally long-lived. Chrome ends recognition after silence or
       // service hiccups; never turn that normal lifecycle event into a permanent failure.
