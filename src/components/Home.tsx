@@ -26,7 +26,7 @@ type Character = {
 type Settings = {
   assistantName: string; wakeWord: string; userName: string; language: string; activeCharacterId: number | null;
   voiceEnabled: boolean; wakeWordEnabled: boolean; freeOnlyMode: boolean; lowPowerMode: boolean; routerMode: string; dailyBudgetUsd: number;
-  ttsProvider: string; ttsModel: string; ttsVoice: string; thinkingModelMode: string; thinkingProvider: string | null; thinkingModel: string | null;
+  ttsProvider: string; ttsModel: string; ttsVoice: string; chatModelMode: string; chatProvider: string | null; chatModel: string | null; thinkingModelMode: string; thinkingProvider: string | null; thinkingModel: string | null;
   renderMode?: string; lipSyncEnabled?: boolean;
 };
 type State = {
@@ -40,6 +40,7 @@ type Msg = {
   costUsd?: number; tokensIn?: number; tokensOut?: number; toolCalls?: ToolLog[]; characterName?: string; pending?: boolean;
 };
 type RouteInfo = { tier: string; provider: string; model: string; reason: string; complexity: number; estimatedInputTokens: number; budgetUsedUsd: number; budgetUsd: number };
+type ModelOption = { id: string; provider: string; model: string; tier: string; capability: string; configured: boolean; label: string };
 
 
 
@@ -52,6 +53,8 @@ const QUICK = [
 
 export default function Home() {
   const [state, setState] = useState<State | null>(null);
+  const [models, setModels] = useState<{ thinking: ModelOption[]; chat: ModelOption[]; audio: ModelOption[] }>({ thinking: [], chat: [], audio: [] });
+  const [showModelPicker, setShowModelPicker] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -102,6 +105,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    fetch("/api/models").then((r) => r.json()).then((j) => setModels(j.slots ?? { thinking: [], chat: [], audio: [] })).catch(() => undefined);
     load().then((j) => {
       setMsgs([{ id: "greet", role: "assistant", content: j.greeting, emotion: j.character.defaultMood as AvatarEmotion, characterName: j.character.name }]);
     });
@@ -223,6 +227,19 @@ export default function Home() {
     },
     [voiceOn],
   );
+
+  const setModelSlot = useCallback(async (slot: "thinking" | "chat" | "audio", value: string) => {
+    if (!stateRef.current) return;
+    const selected = (models[slot] ?? []).find((m) => m.id === value);
+    if (!selected) return;
+    const patch = slot === "thinking"
+      ? { thinkingModelMode: "selected", thinkingProvider: selected.provider, thinkingModel: selected.model }
+      : slot === "chat"
+        ? { chatModelMode: "selected", chatProvider: selected.provider, chatModel: selected.model }
+        : { ttsProvider: selected.provider, ttsModel: selected.model };
+    await fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+    setState((current) => current ? { ...current, settings: { ...current.settings, ...patch } } : current);
+  }, [models]);
 
   const switchCharacter = useCallback(
     async (c: Character, announce = true) => {
@@ -690,9 +707,21 @@ export default function Home() {
 
       {/* RIGHT: Chat */}
       <section className="panel conversation-panel">
-        <div className="conversation-header">
+        <div className="conversation-header relative">
           <div className="flex items-center gap-2"><span className="status-dot" /><span className="text-sm font-medium">Conversation</span><span className="text-sm text-muted-foreground">/ {c.name}</span></div>
-          <button className="text-xs text-slate-400 hover:text-white" onClick={() => { convRef.current = null; window.localStorage.removeItem("convId"); setMsgs([{ id: "greet", role: "assistant", content: state.greeting, emotion: c.defaultMood as AvatarEmotion, characterName: c.name }]); }}><Plus size={15} className="inline" /> New</button>
+          <div className="flex items-center gap-3">
+            <button className="text-xs text-slate-400 hover:text-white" onClick={() => setShowModelPicker((open) => !open)}><SlidersHorizontal size={14} className="mr-1 inline" />Models</button>
+            <button className="text-xs text-slate-400 hover:text-white" onClick={() => { convRef.current = null; window.localStorage.removeItem("convId"); setMsgs([{ id: "greet", role: "assistant", content: state.greeting, emotion: c.defaultMood as AvatarEmotion, characterName: c.name }]); }}><Plus size={15} className="inline" /> New</button>
+          </div>
+          {showModelPicker && <div className="absolute right-3 top-12 z-20 w-[min(23rem,calc(100vw-2rem))] rounded-2xl border border-white/10 bg-slate-950/95 p-3 shadow-2xl backdrop-blur">
+            <div className="mb-2 text-[10px] uppercase tracking-widest text-slate-500">Active model slots</div>
+            {(["thinking", "chat", "audio"] as const).map((slot) => {
+              const options = models[slot];
+              const current = slot === "thinking" ? `${state.settings.thinkingProvider ?? ""}/${state.settings.thinkingModel ?? ""}` : slot === "chat" ? `${state.settings.chatProvider ?? ""}/${state.settings.chatModel ?? ""}` : `${state.settings.ttsProvider}/${state.settings.ttsModel}`;
+              return <label key={slot} className="mb-2 block text-xs text-slate-300"><span className="mb-1 block capitalize">{slot} {slot === "audio" ? "(Fish Audio stays here)" : ""}</span><select className="input !py-1.5 text-xs" value={current} onChange={(e) => setModelSlot(slot, e.target.value)}><option value={current}>{current === "/" || current.endsWith("/") ? "Auto routing" : current}</option>{options.filter((m) => m.configured).map((m) => <option key={m.id} value={m.id}>{m.label} · {m.tier}</option>)}</select></label>;
+            })}
+            <p className="mt-1 text-[10px] text-slate-500">Thinking and chat only show text-capable models. Audio models never answer messages.</p>
+          </div>}
         </div>
 
         <div ref={listRef} className="conversation-messages" role="log" aria-label="Conversation messages" aria-live="polite">

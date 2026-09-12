@@ -20,7 +20,7 @@ type Settings = {
   permissions: Record<string, boolean>;
   envKeys: Record<string, boolean>;
 };
-type ProviderHealth = { checkedAt: string; anyConfigured: boolean; results: { provider: string; tier: string; model: string; ok: boolean; status: number | string; latencyMs: number }[] };
+type ProviderHealth = { checkedAt: string; anyConfigured: boolean; results: { provider: string; tier: string; model: string; ok: boolean; status: number | string; latencyMs: number; detail?: string }[] };
 type Usage = {
   today: number; budget: number;
   byTier: { tier: string; calls: number; tokensIn: number; tokensOut: number; cost: number; avgLatency: number }[];
@@ -414,7 +414,7 @@ export default function SettingsPage() {
                 <div key={i} className={`flex items-center justify-between rounded-xl border p-2.5 text-xs ${r.ok ? "border-emerald-500/30 bg-emerald-500/5" : "border-rose-500/30 bg-rose-500/5"}`}>
                   <div>
                     <div className="font-medium text-slate-100">{r.ok ? "🟢" : "🔴"} {r.provider} <span className="text-slate-500">· {r.tier}</span></div>
-                    <div className="text-[10px] text-slate-400">{r.model} · status {r.status}</div>
+                    <div className="text-[10px] text-slate-400">{r.model} · status {r.status}</div>{r.detail && <div className="mt-1 max-w-[24rem] break-words text-[10px] text-rose-300/80">{r.detail}</div>}
                   </div>
                   <span className="text-slate-400">{r.latencyMs}ms</span>
                 </div>
@@ -484,7 +484,7 @@ export default function SettingsPage() {
           <p className="mb-3 text-xs text-slate-500">Same setup as jarvish 1.0 — API key, base URL and model ID per provider. Leave base URL / model blank to use the default shown in the placeholder.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             {([
-              { prefix: "tokenrouter", label: "TokenRouter", env: "tokenrouter", defBase: "https://api.tokenrouter.io/v1", defModel: "gpt-4o-mini" },
+              { prefix: "tokenrouter", label: "TokenRouter", env: "tokenrouter", defBase: "https://api.tokenrouter.io/v1", defModel: "openai/gpt-5-mini" },
               { prefix: "qwen", label: "Qwen (DashScope)", env: "qwen", defBase: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", defModel: "qwen-plus" },
               { prefix: "aihub", label: "AIHubMix", env: "aihub", defBase: "https://aihubmix.com/v1", defModel: "gpt-4o-mini" },
               { prefix: "custom", label: "Custom (any OpenAI-compatible)", env: "custom", defBase: "https://openrouter.ai/api/v1", defModel: "gpt-4o-mini" },

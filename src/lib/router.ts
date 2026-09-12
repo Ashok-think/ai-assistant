@@ -107,24 +107,25 @@ export function buildCatalog(s: Settings): { spec: ModelSpec; key: string | null
       tier: "fast", key: orKey,
       // Default free model id kept current (OpenRouter retires :free ids periodically). If this
       // 404s, set OPENROUTER_FAST_MODEL / Settings → a live id. The provider falls through anyway.
-      spec: { provider: "openrouter", model: env("OPENROUTER_FAST_MODEL", s.openrouterFastModel) ?? "meta-llama/llama-3.3-70b-instruct:free", baseUrl: base, inPer1M: 0, outPer1M: 0, free: true, supportsTools: false },
+      spec: { provider: "openrouter", model: /fish[-_ ]?audio/i.test(env("OPENROUTER_FAST_MODEL", s.openrouterFastModel) ?? "") ? "meta-llama/llama-3.3-70b-instruct:free" : (env("OPENROUTER_FAST_MODEL", s.openrouterFastModel) ?? "meta-llama/llama-3.3-70b-instruct:free"), baseUrl: base, inPer1M: 0, outPer1M: 0, free: true, supportsTools: false },
     });
     list.push({
       tier: "smart", key: orKey,
-      spec: { provider: "openrouter", model: env("OPENROUTER_SMART_MODEL", s.openrouterSmartModel) ?? "anthropic/claude-3.5-sonnet", baseUrl: base, inPer1M: 3, outPer1M: 15, free: false, supportsTools: true },
+      spec: { provider: "openrouter", model: /fish[-_ ]?audio/i.test(env("OPENROUTER_SMART_MODEL", s.openrouterSmartModel) ?? "") ? "anthropic/claude-3.5-sonnet" : (env("OPENROUTER_SMART_MODEL", s.openrouterSmartModel) ?? "anthropic/claude-3.5-sonnet"), baseUrl: base, inPer1M: 3, outPer1M: 15, free: false, supportsTools: true },
     });
   }
   // OpenAI-compatible BYOK providers (key + base URL + model id, like jarvish 1.0)
   const compat = [
-    { id: "tokenrouter" as const, key: env("TOKENROUTER_API_KEY", s.tokenrouterKey), base: env("TOKENROUTER_BASE_URL", s.tokenrouterBaseUrl), model: env("TOKENROUTER_MODEL", s.tokenrouterModel), defaultBase: "https://api.tokenrouter.io/v1", defaultModel: "gpt-4o-mini" },
+    { id: "tokenrouter" as const, key: env("TOKENROUTER_API_KEY", s.tokenrouterKey), base: env("TOKENROUTER_BASE_URL", s.tokenrouterBaseUrl), model: env("TOKENROUTER_MODEL", s.tokenrouterModel), defaultBase: "https://api.tokenrouter.io/v1", defaultModel: "openai/gpt-5-mini" },
     { id: "qwen" as const, key: env("QWEN_API_KEY", s.qwenKey), base: env("QWEN_BASE_URL", s.qwenBaseUrl), model: env("QWEN_MODEL", s.qwenModel), defaultBase: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", defaultModel: "qwen-plus" },
     { id: "aihub" as const, key: env("AIHUB_API_KEY", s.aihubKey), base: env("AIHUB_BASE_URL", s.aihubBaseUrl), model: env("AIHUB_MODEL", s.aihubModel), defaultBase: "https://aihubmix.com/v1", defaultModel: "gpt-4o-mini" },
     { id: "custom" as const, key: env("CUSTOM_LLM_API_KEY", s.customKey), base: env("CUSTOM_LLM_BASE_URL", s.customBaseUrl), model: env("CUSTOM_LLM_MODEL", s.customModel), defaultBase: "https://openrouter.ai/api/v1", defaultModel: "gpt-4o-mini" },
   ];
   for (const p of compat) {
     if (!p.key) continue;
-    const baseUrl = (p.base ?? p.defaultBase).replace(/\/+$/, "");
-    const model = p.model ?? p.defaultModel;
+    const rawBase = (p.base ?? p.defaultBase).trim();
+    const baseUrl = (rawBase || p.defaultBase).replace(/\/+$/, "").replace(/\/chat\/completions$/, "").replace(/\/models$/, "");
+    const model = (p.model ?? p.defaultModel).trim();
     // single configured model serves both tiers
     list.push({ tier: "fast", key: p.key, spec: { provider: p.id, model, baseUrl, inPer1M: 0, outPer1M: 0, free: false, supportsTools: true } });
     list.push({ tier: "smart", key: p.key, spec: { provider: p.id, model, baseUrl, inPer1M: 0, outPer1M: 0, free: false, supportsTools: true } });
