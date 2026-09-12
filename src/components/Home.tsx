@@ -73,6 +73,7 @@ export default function Home() {
   const [toasts, setToasts] = useState<{ id: string; text: string }[]>([]);
   const [voiceOn, setVoiceOn] = useState(true);
   const speakingRef = useRef(false); // true while TTS is playing — enables barge-in detection
+  const lastSpokenRef = useRef("");
   const [showChars, setShowChars] = useState(false);
   const [debug, setDebug] = useState(false);
   const [browserStatus, setBrowserStatus] = useState<{ enabled: boolean; playwrightInstalled: boolean; running: boolean; ready: boolean } | null>(null);
@@ -157,7 +158,12 @@ export default function Home() {
   /** Perform one server-issued action in the browser and record how it went. */
   const runAction = useCallback(
     async (id: string, action: ClientAction) => {
-      setActions((prev) => [...prev.slice(-7), { id, action, status: "running", detail: "", at: Date.now() }]);
+      setActions((prev) => {
+        const signature = JSON.stringify(action);
+        const duplicate = prev.find((item) => JSON.stringify(item.action) === signature && Date.now() - item.at < 15000);
+        if (duplicate) return prev.map((item) => item.id === duplicate.id ? { ...item, status: "running", detail: "", at: Date.now() } : item);
+        return [...prev.slice(-7), { id, action, status: "running", detail: "", at: Date.now() }];
+      });
       const r = await performAction(action, { confirm: askConfirm });
       const nextStatus = r.ok ? "done" : r.needsTap ? "pending" : "failed";
       setActions((prev) => prev.map((a) => (a.id === id ? { ...a, status: nextStatus, detail: r.detail } : a)));
@@ -184,8 +190,9 @@ export default function Home() {
     // This runs from a real click, so the popup blocker lets it through.
     const r = await performAction(a.action, { userInitiated: true });
     setActions((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: r.ok ? "done" : "failed", detail: r.detail } : x)));
-    if (r.ok) setTimeout(() => setActions((prev) => prev.filter((x) => x.id !== a.id)), 5000);
-  }, []);
+      if (r.ok) setTimeout(() => setActions((prev) => prev.filter((x) => x.id !== a.id)), 5000);
+      else if (/blocked|pairing|authentication|not configured|not available/i.test(r.detail)) pushToast(`action-${a.id}`, r.detail);
+  }, [pushToast]);
 
   // Proactive engine poll
   useEffect(() => {
@@ -221,6 +228,7 @@ export default function Home() {
       // start talking). The onresult handler detects speech and interrupts. speakingRef tells that
       // handler to treat input as a barge-in (and it ignores very short/echo-like fragments).
       speakingRef.current = true;
+      lastSpokenRef.current = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
       await speak(text, {
         voice: { ...s.character.voice, rate: (s.character.voice.rate ?? 1) * (s.settings.voiceSpeed ?? 1), localVoiceName: typeof window !== "undefined" ? window.localStorage.getItem("jarvish-local-voice") ?? undefined : undefined, localLatencyTargetMs: s.settings.localLatencyTargetMs, apiLatencyTargetMs: s.settings.apiLatencyTargetMs, ttsProvider: s.settings.ttsProvider, ttsModel: s.settings.ttsModel, ttsVoice: s.settings.ttsVoice }, emotion: emo, lang: s.settings.language,
         onStart: () => { setTalking(true); if (reqStart) setLatency((l) => ({ ...(l ?? {}), firstAudio: Math.round(performance.now() - reqStart) })); },
@@ -530,10 +538,16 @@ export default function Home() {
   const { voice, micLevel, tone, startListening, stopListening } = useVoiceSession({
     phrase: state?.settings.wakeWord || "nova",
     language: state?.settings.language || "auto",
-    onCommand: (command) => {
-      speechEndRef.current = performance.now();
-      void sendRef.current?.(correctTranscript(command));
-    },
+      onCommand: (command) => {
+        const normalized = correctTranscript(command).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+        const spoken = lastSpokenRef.current;
+        if (spoken && normalized.length >= 8 && (spoken.includes(normalized) || normalized.includes(spoken))) {
+          lastSpokenRef.current = "";
+          return;
+        }
+        speechEndRef.current = performance.now();
+        void sendRef.current?.(correctTranscript(command));
+      },
     onInterrupt: () => {
       responseGenerationRef.current += 1;
       chatAbortRef.current?.abort();

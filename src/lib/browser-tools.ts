@@ -32,7 +32,7 @@ export const BROWSER_TOOLS: ToolDef[] = [
     name: "pc_open",
     skillKey: "pc_browser",
     description:
-      "Open a website in the REAL controlled Chromium on the PC and return the page's title + URL. This is the RELIABLE way to fulfil 'open X' (ChatGPT, YouTube, Google, Gmail, etc.) — it actually navigates and verifies, unlike a browser popup which can be blocked. Accepts a site name (e.g. 'chatgpt', 'youtube') or a full URL.",
+      "Open a website in the server-side controlled Chromium session, not the user's laptop browser. Use this only when the pc_browser skill is authenticated and available. If the result says pairing/authentication/blocked/unavailable, report that once and stop: do not retry pc_open, pc_read, pc_click, or pc_youtube tools. For the user's own browser, use the client open_url action instead. Accepts a site name or full URL.",
     parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
     run: async (a) => {
       const { open } = await ex();
@@ -142,7 +142,7 @@ export const BROWSER_TOOLS: ToolDef[] = [
   {
     name: "pc_youtube_search",
     skillKey: "pc_browser",
-    description: "Run a real YouTube search in the controlled browser and return video titles + watch links (with indexes). Use for 'find the X trailer', 'search YouTube for X'.",
+    description: "Run a YouTube search in the authenticated server-side controlled browser and return video titles + watch links. This is not the user's laptop. If authentication/pairing is blocked, report the failure once and stop; do not retry or claim playback.",
     parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
     run: async (a) => {
       const { youtubeSearch } = await ex();
@@ -156,7 +156,7 @@ export const BROWSER_TOOLS: ToolDef[] = [
     name: "pc_youtube_open",
     skillKey: "pc_browser",
     description:
-      "Open a specific YouTube watch URL (from pc_youtube_search results) in the controlled browser and VERIFY the video page actually loaded. Returns the real title and whether it's playing. Only tell the user it opened if ok.",
+      "Open a YouTube watch URL in the authenticated server-side controlled browser and verify it. This does not control the user's laptop. If pairing/authentication/browser access is blocked, report once and stop; never retry or claim the video played.",
     parameters: { type: "object", properties: { href: { type: "string" } }, required: ["href"] },
     run: async (a) => {
       const { youtubeOpen } = await ex();
