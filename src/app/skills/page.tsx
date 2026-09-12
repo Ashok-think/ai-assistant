@@ -3,6 +3,7 @@
 import { useState } from "react";
 import useSWR from "swr";
 import ArtifactExportPanel from "@/components/ArtifactExportPanel";
+import CapabilityStatusPanel from "@/components/CapabilityStatusPanel";
 
 async function fetchList(url: string) {
   const response = await fetch(url);
@@ -98,6 +99,7 @@ export default function SkillsPage() {
         </section>
 
         <section className="flex flex-col gap-4">
+          <CapabilityStatusPanel />
           <ArtifactExportPanel enabled={skills.some((skill) => skill.key === "document_export" && skill.enabled)} />
           <div className="panel p-4">
             <div className="mb-2 text-sm uppercase tracking-widest text-muted-foreground">Routines</div>

@@ -200,7 +200,7 @@ function pickVoice(lang: string, warmth: number, selectedName?: string): SpeechS
   return preferred.find((v) => /google|natural|neural/i.test(v.name)) ?? preferred[0] ?? null;
 }
 
-export async function speak(text: string, opts: { voice: VoiceSettings; emotion: string; lang?: string; onStart?: () => void; onEnd?: () => void; onMouth?: (f: MouthFrame) => void; onProvider?: (p: string) => void; onFallbackReason?: (reason: string) => void }): Promise<void> {
+export async function speak(text: string, opts: { voice: VoiceSettings; emotion: string; lang?: string; onStart?: () => void; onEnd?: () => void; onMouth?: (f: MouthFrame) => void; onProvider?: (p: string) => void; onFallbackReason?: (reason: string) => void; onLatency?: (metrics: { provider: string; timeToFirstAudioMs: number; totalAudioLatencyMs: number }) => void }): Promise<void> {
   stopSpeaking();
   const generation = speechGeneration;
   const controller = new AbortController();
@@ -214,6 +214,7 @@ export async function speak(text: string, opts: { voice: VoiceSettings; emotion:
   // immediately; the server TTS route remains available for environments without speech synthesis.
   const preferLocalVoice = typeof window !== "undefined" && "speechSynthesis" in window;
   if (!preferLocalVoice) try {
+    const requestStartedAt = performance.now();
     const r = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -226,7 +227,9 @@ export async function speak(text: string, opts: { voice: VoiceSettings; emotion:
       opts.onFallbackReason?.(r.headers.get("X-TTS-Fallback-Reason") ?? "no server TTS provider available");
     }
     if (r.status === 200) {
-      opts.onProvider?.(r.headers.get("X-TTS-Provider") ?? "server");
+      const provider = r.headers.get("X-TTS-Provider") ?? "server";
+      opts.onProvider?.(provider);
+      opts.onLatency?.({ provider, timeToFirstAudioMs: Number(r.headers.get("X-TTS-Time-To-First-Audio-Ms") ?? Math.round(performance.now() - requestStartedAt)), totalAudioLatencyMs: Math.round(performance.now() - requestStartedAt) });
       const blob = await r.blob();
       if (canceled()) return;
       const url = URL.createObjectURL(blob);
