@@ -21,6 +21,7 @@ type SR = {
   stop: () => void;
   abort: () => void;
   onresult: ((e: { resultIndex: number; results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null;
+  onstart: (() => void) | null;
   onend: (() => void) | null;
   onerror: ((e: { error: string }) => void) | null;
 };
@@ -59,68 +60,7 @@ export function detectLangFromText(t: string): string {
   return "en-US";
 }
 
-/** Lowercase, strip punctuation, collapse whitespace — so "Hey, Rio!" == "hey rio". */
-export function normalizeHeard(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/** Levenshtein distance, capped small — used for fuzzy wake matching against mis-hears. */
-function editDistance(a: string, b: string): number {
-  if (a === b) return 0;
-  const m = a.length;
-  const n = b.length;
-  if (!m) return n;
-  if (!n) return m;
-  let prev = Array.from({ length: n + 1 }, (_, i) => i);
-  let cur = new Array<number>(n + 1);
-  for (let i = 1; i <= m; i++) {
-    cur[0] = i;
-    for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      cur[j] = Math.min(cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
-    }
-    [prev, cur] = [cur, prev];
-  }
-  return prev[n];
-}
-
-/**
- * Does the heard text contain the wake word? Tolerant of punctuation, the optional leading
- * "hey", and small mis-hears (e.g. "rio" heard as "reo"/"ryo"). Returns the command that
- * followed the wake word, if any.
- */
-export function matchesWake(heardRaw: string, wakeRaw: string): { hit: boolean; rest: string } {
-  const heard = normalizeHeard(heardRaw);
-  const wake = normalizeHeard(wakeRaw) || "hey nova";
-  const name = wake.replace(/^hey\s+/, "").trim() || wake;
-  if (!heard) return { hit: false, rest: "" };
-
-  // Direct substring (fast path) for the full phrase or just the name.
-  for (const needle of [wake, name]) {
-    const idx = heard.indexOf(needle);
-    if (idx >= 0) return { hit: true, rest: heard.slice(idx + needle.length).trim() };
-  }
-
-  // Fuzzy: check each spoken word (and adjacent pairs) against the name.
-  const tol = name.length <= 4 ? 1 : name.length <= 7 ? 2 : 3;
-  const words = heard.split(" ");
-  for (let i = 0; i < words.length; i++) {
-    if (editDistance(words[i], name) <= tol) {
-      return { hit: true, rest: words.slice(i + 1).join(" ").trim() };
-    }
-    if (i + 1 < words.length) {
-      const pair = `${words[i]} ${words[i + 1]}`;
-      if (editDistance(pair, wake) <= tol + 1) {
-        return { hit: true, rest: words.slice(i + 2).join(" ").trim() };
-      }
-    }
-  }
-  return { hit: false, rest: "" };
-}
+export { matchesWake, normalizeHeard } from "./voice-session";
 
 let speechGeneration = 0;
 let speechRequest: AbortController | null = null;
@@ -351,11 +291,19 @@ export async function speak(text: string, opts: { voice: VoiceSettings; emotion:
 /** Simple mic level + voice-tone estimator (energy + variability → excited / calm / low). */
 export async function createToneAnalyzer(onLevel: (level: number, tone: string) => void): Promise<() => void> {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const ctx = new AudioContext();
-  const src = ctx.createMediaStreamSource(stream);
-  const analyser = ctx.createAnalyser();
-  analyser.fftSize = 512;
-  src.connect(analyser);
+  let ctx: AudioContext | undefined;
+  let analyser: AnalyserNode;
+  try {
+    ctx = new AudioContext();
+    const src = ctx.createMediaStreamSource(stream);
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    src.connect(analyser);
+  } catch (error) {
+    stream.getTracks().forEach((track) => track.stop());
+    void ctx?.close();
+    throw error;
+  }
   const buf = new Uint8Array(analyser.frequencyBinCount);
   const history: number[] = [];
   let raf = 0;

@@ -8,7 +8,9 @@ import { ArrowUp, ArrowUpRight, AudioLines, ChevronDown, Mic, Paperclip, Plus, R
 import Waveform from "./Waveform";
 import ActionTimeline from "./ActionTimeline";
 import ToolConfirmation from "./ToolConfirmation";
-import { createToneAnalyzer, getRecognizerCtor, langToBcp47, matchesWake, normalizeHeard, speak, stopSpeaking, type VoiceSettings } from "@/lib/voice-client";
+import { speak, stopSpeaking, type VoiceSettings } from "@/lib/voice-client";
+import { useVoiceSession } from "./useVoiceSession";
+import VoiceDiagnostics from "./VoiceDiagnostics";
 import { performAction, type ActionState } from "@/lib/client-actions";
 import type { ClientAction } from "@/lib/actions";
 import { deriveState, emotionForState, stateLabel } from "@/lib/character-state";
@@ -38,8 +40,7 @@ type Msg = {
 };
 type RouteInfo = { tier: string; provider: string; model: string; reason: string; complexity: number; estimatedInputTokens: number; budgetUsedUsd: number; budgetUsd: number };
 
-/** A wake word is free text from Settings, so it can contain regex metacharacters. */
-const reEscape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 
 const QUICK = [
   { label: "Plan my day", text: "Help me plan my day using my todos and reminders." },
@@ -57,21 +58,15 @@ export default function Home() {
   const [emotion, setEmotion] = useState<AvatarEmotion>("happy");
   const [talking, setTalking] = useState(false);
   const [mouth, setMouth] = useState<{ level: number; viseme: "closed" | "mid" | "wide" | "round" }>({ level: 0, viseme: "closed" });
-  const [listening, setListening] = useState(false);
+
   // Live agent activity: the current step/tool driving the character state, plus a real log.
   const [agentStep, setAgentStep] = useState<AgentStep | null>(null);
   const [agentTool, setAgentTool] = useState<string | null>(null);
   const [agentLog, setAgentLog] = useState<AgentLogEntry[]>([]);
-  const [wakeArmed, setWakeArmed] = useState(false);
-  const [interim, setInterim] = useState("");
+
   const [route, setRoute] = useState<RouteInfo | null>(null);
   const [toasts, setToasts] = useState<{ id: string; text: string }[]>([]);
-  const [micLevel, setMicLevel] = useState(0);
-  const [tone, setTone] = useState("");
   const [voiceOn, setVoiceOn] = useState(true);
-  const [autoListen, setAutoListen] = useState(false);
-  const autoListenRef = useRef(false);
-  autoListenRef.current = autoListen;
   const speakingRef = useRef(false); // true while TTS is playing — enables barge-in detection
   const [showChars, setShowChars] = useState(false);
   const [debug, setDebug] = useState(false);
@@ -89,10 +84,10 @@ export default function Home() {
   const busyRef = useRef(false);
   const chatAbortRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recRef = useRef<{ stop: () => void; abort: () => void } | null>(null);
+
   const seenRef = useRef<Set<string>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
-  const analyzerStop = useRef<(() => void) | null>(null);
+
   const stateRef = useRef<State | null>(null);
   stateRef.current = state;
 
@@ -196,8 +191,7 @@ export default function Home() {
     return () => clearInterval(h);
   }, [pushToast, voiceOn]);
 
-  // Filled after startListening is defined; lets `say` re-arm hands-free listening on TTS end.
-  const startListenRef = useRef<((mode: "once" | "wake" | "auto") => void) | null>(null);
+
 
   const say = useCallback(
     async (text: string, emo: AvatarEmotion, reqStart?: number) => {
@@ -206,9 +200,7 @@ export default function Home() {
       // In auto mode we KEEP the mic open during TTS so the user can barge in ("Hey Rio" or just
       // start talking). The onresult handler detects speech and interrupts. speakingRef tells that
       // handler to treat input as a barge-in (and it ignores very short/echo-like fragments).
-      const wasAuto = autoListenRef.current;
       speakingRef.current = true;
-      if (wasAuto && !recRef.current) startListenRef.current?.("auto");
       await speak(text, {
         voice: s.character.voice, emotion: emo, lang: s.settings.language,
         onStart: () => { setTalking(true); if (reqStart) setLatency((l) => ({ ...(l ?? {}), firstAudio: Math.round(performance.now() - reqStart) })); },
@@ -219,10 +211,7 @@ export default function Home() {
       speakingRef.current = false;
       setTalking(false);
       setMouth({ level: 0, viseme: "closed" });
-      // SPEAKING → briefly IDLE → keep listening (mic already open in auto mode).
-      if (wasAuto && autoListenRef.current && !recRef.current) {
-        setTimeout(() => { if (autoListenRef.current && !recRef.current) startListenRef.current?.("auto"); }, 250);
-      }
+      // The voice session owns restarts; completing TTS must never re-enable a stopped mic.
     },
     [voiceOn],
   );
@@ -493,233 +482,27 @@ export default function Home() {
   );
   sendRef.current = send;
 
-  // ---- Speech recognition (STT + wake word + interrupt) ----
-  const startListening = useCallback(
-    (mode: "once" | "wake" | "auto") => {
-      const Ctor = getRecognizerCtor();
-      if (!Ctor) {
-        pushToast("nosr", "Speech recognition isn't supported in this browser. Try Chrome/Edge.");
-        return;
-      }
-      recRef.current?.abort();
-      const rec = new Ctor();
-      const s = stateRef.current;
-      // STT language. The Web Speech API is single-language per session (no true code-switching),
-      // so for auto/mixed we use en-IN — it handles Indian-accented English plus many common
-      // transliterated Telugu/Hindi words far better than en-US, and the LLM understands the rest.
-      const langPref = s?.settings.language ?? "auto";
-      rec.lang = langPref === "auto" ? "en-IN" : langToBcp47(langPref);
-      // Continuous for wake + auto modes so it keeps listening hands-free.
-      rec.continuous = mode === "wake" || mode === "auto";
-      rec.interimResults = true;
-      // "auto" mode is always awake (no wake word required); "once" is a single push-to-talk.
-      let awake = mode === "once" || mode === "auto";
-      let finalBuf = "";
-      let silenceTimer: ReturnType<typeof setTimeout> | null = null;
-      let fatal = false;
-      const wake = (s?.settings.wakeWord ?? "hey rio").toLowerCase();
-      const wakeName = wake.replace(/^hey\s+/, "").trim() || wake;
-      // End-of-speech silence window (configurable). Shorter = snappier auto-submit.
-      const silenceMs = mode === "auto" ? 900 : 1400;
-
-      rec.onresult = (e) => {
-        let interimText = "";
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const r = e.results[i];
-          const txt = r[0].transcript;
-          if (r.isFinal) finalBuf += " " + txt;
-          else interimText += txt;
-        }
-        const heard = normalizeHeard(finalBuf + " " + interimText);
-        // Browser STT cannot distinguish the speaker from its own TTS. Only explicit wake/stop
-        // commands interrupt playback; arbitrary multiword echo must never become a new request.
-        const wakeHit = matchesWake(finalBuf + " " + interimText, (s?.settings.wakeWord ?? "hey rio")).hit;
-        const stopHit = /^(stop|cancel|quiet|shush|enough|be quiet)[.!?]*$/i.test(heard);
-        const looksIntentional = wakeHit || stopHit;
-        if (speakingRef.current && !looksIntentional) {
-          finalBuf = "";
-          if (silenceTimer) clearTimeout(silenceTimer);
-          return;
-        }
-        if (speakingRef.current && looksIntentional) {
-          // Immediately clear queued/playing TTS + lip-sync so old audio can't leak into the new turn.
-          stopSpeaking();
-          speakingRef.current = false;
-          setTalking(false);
-          setMouth({ level: 0, viseme: "closed" });
-          if (busyRef.current && chatAbortRef.current) { chatAbortRef.current.abort(); chatAbortRef.current = null; }
-        } else if (!speakingRef.current && heard.length > 2 && busyRef.current && chatAbortRef.current) {
-          // Not speaking but a run is in-flight (thinking) and the user talks → cancel + relisten.
-          stopSpeaking();
-          setTalking(false);
-          chatAbortRef.current.abort();
-          chatAbortRef.current = null;
-        }
-        if (stopHit) {
-          void send("stop");
-          finalBuf = "";
-          setInterim("");
-          if (silenceTimer) clearTimeout(silenceTimer);
-          return;
-        }
-        if (!awake) {
-          // Fuzzy, punctuation-tolerant wake match (handles "Hey, Rio!" and small mis-hears).
-          const m = matchesWake(finalBuf + " " + interimText, wake);
-          if (m.hit) {
-            awake = true;
-            setEmotion("excited");
-            setStatus("Yes? I'm listening…");
-            finalBuf = m.rest ? ` ${m.rest}` : "";
-          } else {
-            setInterim("");
-            return;
-          }
-        }
-        // Once awake, strip any lingering wake word out of the running buffer.
-        const shown = normalizeHeard(
-          (finalBuf + " " + interimText)
-            .replace(new RegExp(reEscape(wake), "gi"), " ")
-            .replace(new RegExp(reEscape(wakeName), "gi"), " "),
-        );
-        setInterim(shown);
-        if (silenceTimer) clearTimeout(silenceTimer);
-        silenceTimer = setTimeout(() => {
-          if (recRef.current !== rec) return;
-          const cmd = normalizeHeard(
-            finalBuf.replace(new RegExp(reEscape(wake), "gi"), " ").replace(new RegExp(reEscape(wakeName), "gi"), " "),
-          );
-          // End-of-speech: finalize + auto-submit (no Send button). Require a couple of words so
-          // stray noise doesn't fire a request. Light brand-name correction on the transcript.
-          if (cmd && cmd.length > 1) { speechEndRef.current = performance.now(); send(correctTranscript(cmd)); }
-          finalBuf = "";
-          setInterim("");
-          if (mode === "once") rec.stop();
-          else if (mode === "wake") {
-            // Back to sleep until the wake word is heard again.
-            awake = false;
-            setStatus("");
-          } else {
-            // auto: stay awake and keep listening for the next utterance.
-            setStatus("");
-          }
-        }, silenceMs);
-      };
-      rec.onerror = (e) => {
-        // Permission problems are permanent until the user acts, so don't let `onend` respawn.
-        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-          fatal = true;
-          recRef.current = null;
-          setListening(false);
-          setWakeArmed(false);
-          pushToast("mic", "Microphone permission denied. Enable it in the browser, then tap Wake word again.");
-        } else if (e.error === "network") {
-          // Chrome's Web Speech API is cloud-based — no network means no STT.
-          pushToast("stt-net", "Speech recognition needs internet (Chrome sends audio to Google). Check your connection.");
-        } else if (e.error === "audio-capture") {
-          fatal = true;
-          pushToast("stt-mic", "No microphone found. Plug one in or check your OS sound settings.");
-        }
-        // `no-speech` and `aborted` are normal in wake mode; onend will respawn.
-      };
-      rec.onend = () => {
-        // Wake mode has to survive Chrome ending the session on every silence gap. Restarting
-        // synchronously inside `onend` throws InvalidStateError, so wait a beat — and bail if
-        // `stopListening` ran in the meantime, otherwise the mic can never be turned off.
-        if ((mode === "wake" || mode === "auto") && !fatal && recRef.current === rec) {
-          setTimeout(() => {
-            if (recRef.current !== rec) return;
-            try {
-              rec.start();
-            } catch {
-              recRef.current = null;
-              setListening(false);
-              setWakeArmed(false);
-            }
-          }, 400);
-        } else {
-          setListening(false);
-          setInterim("");
-        }
-      };
-      recRef.current = rec;
-      try {
-        rec.start();
-      } catch {
-        // Already-started is the only realistic throw here, and it means we're listening anyway.
-      }
-      setListening(true);
-      if (mode === "wake" || mode === "auto") setWakeArmed(true);
-      if (!analyzerStop.current) {
-        createToneAnalyzer((lvl, t) => { setMicLevel(lvl); setTone(t); }).then((stop) => { analyzerStop.current = stop; }).catch(() => {});
-      }
+  const { voice, micLevel, tone, startListening, stopListening } = useVoiceSession({
+    phrase: state?.settings.wakeWord || "hey rio",
+    language: state?.settings.language || "auto",
+    onCommand: (command) => {
+      speechEndRef.current = performance.now();
+      void sendRef.current?.(correctTranscript(command));
     },
-    [pushToast, send],
-  );
-
-  const stopListening = useCallback(() => {
-    const r = recRef.current;
-    recRef.current = null;
-    r?.abort();
-    setListening(false);
-    setWakeArmed(false);
-    setInterim("");
-    analyzerStop.current?.();
-    analyzerStop.current = null;
-    setMicLevel(0);
-  }, []);
-
-  // Let `say` (defined earlier) re-arm listening after TTS via a ref, avoiding a circular dep.
-  startListenRef.current = startListening;
-
-  // AUTO LISTEN toggle: when on, preflight the mic + audio, then start hands-free listening.
-  useEffect(() => {
-    if (autoListen) {
-      (async () => {
-        // Preflight microphone permission with a clear message on failure (no silent fail).
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          stream.getTracks().forEach((t) => t.stop());
-        } catch (err) {
-          const name = (err as DOMException)?.name;
-          pushToast("mic-auto", name === "NotAllowedError"
-            ? "Microphone permission denied — enable it in the browser to use Auto Listen."
-            : name === "NotFoundError"
-              ? "No microphone found. Connect one and try again."
-              : "Couldn't access the microphone for Auto Listen.");
-          setAutoListen(false);
-          return;
-        }
-        // Autoplay/AudioContext need a user gesture — the toggle click counts. Warm the context.
-        try {
-          const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-          if (AC) { const c = new AC(); if (c.state === "suspended") await c.resume(); c.close(); }
-        } catch { /* ignore */ }
-        if (!recRef.current && !busyRef.current && !talking) startListening("auto");
-      })();
-    } else {
-      // Only stop if we're in a hands-free session (don't kill a push-to-talk).
-      if (wakeArmed) stopListening();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoListen]);
-
-  // Turning the wake word on in Settings has to actually arm the mic — until now the only thing
-  // that ever called startListening("wake") was the button, so the setting looked broken.
-  // Browsers reject getUserMedia without a user gesture on a fresh load, so if the first attempt
-  // is refused we say so and let the button take over.
-  const autoArmed = useRef(false);
-  useEffect(() => {
-    if (!state?.settings.wakeWordEnabled) {
-      autoArmed.current = false;
-      return;
-    }
-    if (autoArmed.current || recRef.current) return;
-    const t = setTimeout(() => {
-      autoArmed.current = true;
-      startListening("wake");
-    }, 600);
-    return () => clearTimeout(t);
-  }, [state?.settings.wakeWordEnabled, startListening]);
+    onInterrupt: () => {
+      stopSpeaking();
+      speakingRef.current = false;
+      setTalking(false);
+      setMouth({ level: 0, viseme: "closed" });
+      chatAbortRef.current?.abort();
+    },
+    isOccupied: () => speakingRef.current || busyRef.current,
+  });
+  const listening = voice.phase === "wake-listening" || voice.phase === "capturing";
+  const voiceActive = voice.phase !== "idle" && voice.phase !== "error";
+  const wakeArmed = voiceActive && voice.mode === "wake";
+  const autoListen = voiceActive && voice.mode === "auto";
+  const interim = voice.command;
 
   if (!state) {
     return (
@@ -786,7 +569,7 @@ export default function Home() {
           {/* AUTO LISTEN — hands-free continuous conversation (no Talk button needed). */}
           <button
             className={`btn mt-3 w-full ${autoListen ? "btn-primary" : "btn-ghost"}`}
-            onClick={() => setAutoListen((v) => !v)}
+            onClick={() => autoListen ? stopListening() : startListening("auto")}
             title="Hands-free: JARVIS listens, detects end of speech, and replies automatically"
           >
             <AudioLines size={19} /> {autoListen ? "End voice session" : "Start a conversation"} <span className="ml-auto"><ArrowUpRight size={18} /></span>
@@ -796,14 +579,14 @@ export default function Home() {
           <div className="mt-2 grid grid-cols-3 gap-2">
             <button
               className={`btn ${listening && !wakeArmed ? "btn-primary" : "btn-ghost"}`}
-              onClick={() => (listening && !wakeArmed ? stopListening() : startListening("once"))}
+              onClick={() => (voiceActive && voice.mode === "once" ? stopListening() : startListening("once"))}
               disabled={busy || autoListen}
               title="Push to talk"
             >
-              <Mic size={16} /> {listening && !wakeArmed ? "Stop mic" : "Talk"}
+              <Mic size={16} /> {voiceActive && voice.mode === "once" ? "Stop mic" : "Talk"}
             </button>
-            <button className={`btn ${wakeArmed ? "btn-primary" : "btn-ghost"}`} onClick={() => (wakeArmed ? stopListening() : startListening("wake"))} title="Always-on wake word">
-              <Radio size={16} /> {wakeArmed ? "Armed" : "Wake"}
+            <button className={`btn ${wakeArmed ? "btn-primary" : "btn-ghost"}`} onClick={() => (wakeArmed ? stopListening() : startListening("wake"))} title="Listen for the full wake phrase while this page is open">
+              <Radio size={16} /> {wakeArmed ? "Stop wake" : "Wake"}
             </button>
             <button className="btn btn-ghost" onClick={() => { setVoiceOn((v) => !v); stopSpeaking(); setTalking(false); setMouth({ level: 0, viseme: "closed" }); chatAbortRef.current?.abort(); }}>
               {voiceOn ? <Volume2 size={16} /> : <VolumeX size={16} />} {voiceOn ? "Voice" : "Muted"}
@@ -815,6 +598,7 @@ export default function Home() {
               : <>Enable Wake, then say <span className="text-primary">“{state.settings.wakeWord}”</span>. Your microphone stays off until enabled.</>}
           </p>
 
+          <VoiceDiagnostics voice={voice} phrase={state.settings.wakeWord || "hey rio"} stop={stopListening} retry={() => startListening("wake")} />
           <details className="engine-details"><summary>Under the hood <SlidersHorizontal size={14} /></summary>
           {/* Router HUD */}
           <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-3">
