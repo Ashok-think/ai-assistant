@@ -225,9 +225,9 @@ async function migrate() {
   } catch {
     /* ignore */
   }
-  // Default wake word is "hey rio" (the character is Rio). Migrate the old default only.
+  // Nova is accepted by the matcher; only fill missing values so existing custom phrases stay intact.
   try {
-    await client.execute("UPDATE settings SET wake_word='hey rio' WHERE wake_word='hey nova' OR wake_word IS NULL OR wake_word=''");
+    await client.execute("UPDATE settings SET wake_word='nova' WHERE wake_word IS NULL OR wake_word=''");
   } catch {
     /* ignore */
   }

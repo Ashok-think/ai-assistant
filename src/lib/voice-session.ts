@@ -16,10 +16,19 @@ export const normalizeHeard = (text: string) => text.toLowerCase().replace(/[^\p
 
 export function matchesWake(heard: string, phrase: string): { hit: boolean; rest: string } {
   const tokens = [...heard.matchAll(/[\p{L}\p{N}]+/gu)];
-  const wake = normalizeHeard(phrase) || "hey rio";
-  const variants = wake === "hey rio"
-    ? ["hey rio", "hey reo", "hey ryo", "hey riyō", "a rio", "hey jarvis", "okay rio", "ok rio"]
-    : [wake, wake.replace(/^hey\s+/u, "okay "), wake.replace(/^hey\s+/u, "ok ")];
+  const wake = normalizeHeard(phrase) || "nova";
+  const configuredVariants = [wake, wake.replace(/^hey\s+/u, "okay "), wake.replace(/^hey\s+/u, "ok ")];
+  const variants = Array.from(new Set([
+    ...configuredVariants,
+    "nova",
+    "hey nova",
+    "okay nova",
+    "ok nova",
+    "hey rio",
+    "hey reo",
+    "hey ryo",
+    "hey jarvis",
+  ]));
   for (let i = 0; i < tokens.length; i++) {
     for (const variant of variants) {
       const words = variant.split(" ");
@@ -70,7 +79,7 @@ export class VoiceSession {
   private silence: ReturnType<typeof setTimeout> | null = null;
   private retries = 0;
   private awakeUntil = 0;
-  private settings = { mode: "once" as VoiceMode, phrase: "hey rio", language: "en-IN" };
+  private settings = { mode: "once" as VoiceMode, phrase: "nova", language: "en-IN" };
 
   constructor(options: VoiceOptions) { this.options = options; }
   private now() { return (this.options.now ?? Date.now)(); }

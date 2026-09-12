@@ -509,7 +509,7 @@ export default function Home() {
   sendRef.current = send;
 
   const { voice, micLevel, tone, startListening, stopListening } = useVoiceSession({
-    phrase: state?.settings.wakeWord || "hey rio",
+    phrase: state?.settings.wakeWord || "nova",
     language: state?.settings.language || "auto",
     onCommand: (command) => {
       speechEndRef.current = performance.now();
@@ -624,7 +624,7 @@ export default function Home() {
               : <>Enable Wake, then say <span className="text-primary">“{state.settings.wakeWord}”</span>. Your microphone stays off until enabled.</>}
           </p>
 
-          <VoiceDiagnostics voice={voice} phrase={state.settings.wakeWord || "hey rio"} language={state.settings.language} stop={stopListening} retry={() => startListening("wake")} pushToTalk={() => startListening("once")} />
+          <VoiceDiagnostics voice={voice} phrase={state.settings.wakeWord || "nova"} language={state.settings.language} stop={stopListening} retry={() => startListening("wake")} pushToTalk={() => startListening("once")} />
           <details className="engine-details"><summary>Under the hood <SlidersHorizontal size={14} /></summary>
           {/* Router HUD */}
           <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-3">
