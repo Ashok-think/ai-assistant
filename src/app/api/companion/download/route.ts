@@ -1,5 +1,6 @@
 const setupScript = `# Jarvish Windows Companion setup
 $ErrorActionPreference = "Stop"
+try {
 $JarvishHome = Join-Path $env:USERPROFILE "Jarvish"
 $ConfigDir = Join-Path $JarvishHome "config"
 $ExistingConfig = Join-Path $ConfigDir "permissions.json"
@@ -19,7 +20,14 @@ if (Test-Path $ExistingConfig) {
 Set-Content -Path (Join-Path $JarvishHome "COMPANION_VERSION") -Value "0.2.0" -Encoding UTF8
 Start-Process "https://jarvish.vercel.app/cloud"
 Write-Host "Jarvish companion updated at $JarvishHome"
-Write-Host "Your config and permissions were preserved. Open Jarvish Cloud to finish secure pairing."
+Write-Host "Your config and permissions were preserved. Open Jarvish Cloud to finish secure pairing." -ForegroundColor Green
+Write-Host "Setup completed successfully. This window will stay open so you can read the result."
+} catch {
+  Write-Host "Jarvish setup could not complete:" -ForegroundColor Red
+  Write-Host $_.Exception.Message -ForegroundColor Yellow
+  Write-Host "If Windows blocked this script, run this once in PowerShell:" -ForegroundColor Yellow
+  Write-Host "Set-ExecutionPolicy -Scope CurrentUser RemoteSigned" -ForegroundColor Cyan
+}
 Read-Host "Press Enter to close"
 `;
 
