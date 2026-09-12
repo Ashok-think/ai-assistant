@@ -5,6 +5,8 @@ import { desc, eq } from "drizzle-orm";
 import { composeUrl, isAllowedUrl, normalizeUrl, SITE_SHORTCUTS, type ClientAction, type MessageApp } from "./actions";
 import { BROWSER_TOOLS } from "./browser-tools";
 import { ANDROID_TOOLS } from "./android-tools";
+import { PACKAGE_TOOLS } from "./skill-package-tools";
+import { SKILL_PACKAGES } from "./skill-packages";
 
 /**
  * What a tool hands back. `text` is what the model and the user read; `action` is work only the
@@ -93,6 +95,7 @@ export function parseWhen(input: string, now = new Date()): Date | null {
 }
 
 export const TOOLS: ToolDef[] = [
+  ...PACKAGE_TOOLS,
   {
     name: "get_weather",
     skillKey: "weather",
@@ -438,7 +441,8 @@ export const TOOLS: ToolDef[] = [
 ];
 
 
-export const SKILL_CATALOG = [
+export const SKILL_CATALOG: { key: string; name: string; description: string; category: string; requiresKey?: string }[] = [
+  ...SKILL_PACKAGES.map((entry) => ({ key: entry.key, name: entry.name, description: entry.detail, category: "reviewed packages", requiresKey: entry.status === "blocked" ? "UNAVAILABLE_RUNTIME" : undefined })),
   { key: "weather", name: "Weather", description: "Live weather via Open-Meteo (free, no key).", category: "information" },
   { key: "search", name: "Web Search & Wikipedia", description: "DuckDuckGo instant answers + Wikipedia.", category: "information" },
   { key: "research", name: "Deep Web Research", description: "Finds and reads multiple real sources, then summarizes with citations. Keyless (DuckDuckGo + Wikipedia).", category: "information" },

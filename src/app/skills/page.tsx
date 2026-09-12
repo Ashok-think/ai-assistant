@@ -1,28 +1,34 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import useSWR from "swr";
+import ArtifactExportPanel from "@/components/ArtifactExportPanel";
 
-type Skill = { id: number; key: string; name: string; description: string; category: string; enabled: boolean; builtin: boolean; requiresKey: string | null };
+async function fetchList(url: string) {
+  const response = await fetch(url);
+  const data = await response.json();
+  if (!response.ok || !Array.isArray(data)) throw new Error(data.error || "Could not load this local workspace.");
+  return data;
+}
+
+type Skill = { id: number; key: string; name: string; description: string; category: string; enabled: boolean; builtin: boolean; requiresKey: string | null; readiness?: "guidance" | "adapted" | "blocked"; source?: string };
 type Routine = { id: number; name: string; description: string; schedule: string; steps: { tool: string; args: Record<string, unknown> }[] };
 
 export default function SkillsPage() {
-  const [skills, setSkills] = useState<Skill[]>([]);
-  const [routines, setRoutines] = useState<Routine[]>([]);
+  const { data: skills = [], error, mutate: refreshSkills } = useSWR<Skill[]>("/api/skills", fetchList);
+  const { data: routines = [], mutate: refreshRoutines } = useSWR<Routine[]>("/api/routines", fetchList);
   const [output, setOutput] = useState<string>("");
   const [newSkill, setNewSkill] = useState({ key: "", name: "", description: "" });
   const [newRoutine, setNewRoutine] = useState({ name: "", schedule: "07:00", city: "Delhi" });
 
-  const load = useCallback(async () => {
-    const [s, r] = await Promise.all([fetch("/api/skills").then((x) => x.json()), fetch("/api/routines").then((x) => x.json())]);
-    setSkills(s);
-    setRoutines(r);
-  }, []);
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { load(); }, [load]);
+  const load = () => Promise.all([refreshSkills(), refreshRoutines()]);
 
   const toggle = async (s: Skill) => {
-    await fetch("/api/skills", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: s.id, enabled: !s.enabled }) });
-    load();
+    try {
+      const response = await fetch("/api/skills", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: s.id, enabled: !s.enabled }) });
+      if (!response.ok) throw new Error((await response.json()).error || "Skill update failed.");
+      await load();
+    } catch (error) { setOutput(error instanceof Error ? error.message : "Skill update failed."); }
   };
   const addSkill = async () => {
     if (!newSkill.key || !newSkill.name) return;
@@ -51,8 +57,9 @@ export default function SkillsPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-4">
       <header>
-        <h1 className="text-2xl font-semibold text-white">🧩 Skill Store & Routines</h1>
-        <p className="text-sm text-slate-400">Toggle abilities on/off. Enabled skills become tools the model can call. Skills needing an API key are shown but locked until configured.</p>
+        <h1 className="text-2xl font-semibold text-foreground">Skills & routines</h1>
+        <p className="text-sm text-muted-foreground">Local workspace abilities. Reviewed guidance is not a completed task; adapted tools use the existing execution policy. Unavailable runtimes cannot be enabled.</p>
+        {error && <p role="alert" className="text-sm text-muted-foreground">{error.message}</p>}
       </header>
 
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
@@ -66,10 +73,12 @@ export default function SkillsPage() {
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-slate-100">{s.name} {!s.builtin && <span className="chip">custom</span>}</div>
                       <div className="text-xs text-slate-400">{s.description}</div>
-                      {s.requiresKey && <div className="mt-1 text-[10px] text-amber-300">needs {s.requiresKey}</div>}
+                      {s.readiness && <p className="text-sm text-primary">{s.readiness === "blocked" ? "Runtime unavailable" : s.readiness === "guidance" ? "Reviewed guidance" : "Adapted tool"}</p>}
+                      {s.source && <p className="break-words text-sm text-muted-foreground">Source: {s.source}</p>}
+                      {s.requiresKey && !s.readiness && <div className="text-sm text-muted-foreground">Requires {s.requiresKey}</div>}
                     </div>
-                    <button onClick={() => toggle(s)} className={`relative h-6 w-11 shrink-0 rounded-full transition ${s.enabled ? "bg-gradient-to-r from-violet-500 to-cyan-400" : "bg-white/15"}`}>
-                      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${s.enabled ? "left-[22px]" : "left-0.5"}`} />
+                    <button role="switch" aria-label={`${s.name} enabled`} aria-checked={s.enabled} disabled={s.readiness === "blocked"} onClick={() => toggle(s)} className={`btn min-w-16 !px-2 ${s.enabled ? "btn-primary" : "btn-ghost"}`}>
+                      {s.readiness === "blocked" ? "Locked" : s.enabled ? "On" : "Off"}
                     </button>
                   </div>
                 ))}
@@ -88,9 +97,10 @@ export default function SkillsPage() {
           </div>
         </section>
 
-        <section className="space-y-4">
+        <section className="flex flex-col gap-4">
+          <ArtifactExportPanel enabled={skills.some((skill) => skill.key === "document_export" && skill.enabled)} />
           <div className="panel p-4">
-            <div className="mb-2 text-xs uppercase tracking-widest text-slate-400">Routines</div>
+            <div className="mb-2 text-sm uppercase tracking-widest text-muted-foreground">Routines</div>
             <ul className="space-y-2">
               {routines.map((r) => (
                 <li key={r.id} className="rounded-xl border border-white/10 bg-white/5 p-3">

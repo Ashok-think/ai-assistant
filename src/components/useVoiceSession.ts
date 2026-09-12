@@ -35,7 +35,7 @@ export function useVoiceSession(options: Options) {
       onChange: (snapshot) => {
         if (disposed) return;
         setVoice(snapshot);
-        if (["idle", "error", "permission"].includes(snapshot.phase)) {
+        if (["idle", "stopped", "error", "permission"].includes(snapshot.phase)) {
           releaseAnalyzer();
           setMicLevel(0);
           setTone("");

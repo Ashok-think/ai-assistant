@@ -26,10 +26,10 @@ export async function extractText(filename: string, mime: string, bytes: Uint8Ar
     if (ext === "pdf" || mime === "application/pdf") {
       // pdf-parse v2 exposes a PDFParse class with getText().
       const { PDFParse } = (await import("pdf-parse")) as unknown as {
-        PDFParse: new (opts: { data: Uint8Array }) => { getText: () => Promise<{ text: string }> };
+        PDFParse: new (opts: { data: Uint8Array }) => { getText: () => Promise<{ text: string }>; destroy: () => Promise<void> };
       };
       const parser = new PDFParse({ data: bytes });
-      const out = await parser.getText();
+      const out = await parser.getText().finally(() => parser.destroy());
       const text = (out.text || "").trim();
       if (!text) return { ok: false, error: "That PDF has no extractable text (it may be scanned images). I can read it as an image if you screenshot a page." };
       return { ok: true, text: text.slice(0, MAX_CHARS), kind: "pdf", chars: text.length };

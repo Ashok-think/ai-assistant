@@ -102,7 +102,7 @@ test("ambient speech does not cancel work; explicit stop does", async () => {
 test("stop cancels restart timers and guards stale event callbacks", async () => {
   const f = fixture(); await f.start(); const stale = f.recognizers[0].onend;
   stale(); f.session.stop(); stale(); f.tick(20000);
-  assert.equal(f.recognizers.length, 1); assert.equal(f.state.phase, "idle"); assert.equal(f.timers.size, 0);
+  assert.equal(f.recognizers.length, 1); assert.equal(f.state.phase, "stopped"); assert.equal(f.timers.size, 0);
 });
 
 test("pending permission completion cannot revive a stopped session", async () => {
@@ -110,7 +110,7 @@ test("pending permission completion cannot revive a stopped session", async () =
   const f = fixture({ permission: () => new Promise((r) => { resolve = r; }) });
   const pending = f.start(); f.session.stop();
   resolve({ getTracks: () => [{ stop() { stopped++; } }] }); await pending;
-  assert.equal(stopped, 1); assert.equal(f.recognizers.length, 0); assert.equal(f.state.phase, "idle");
+  assert.equal(stopped, 1); assert.equal(f.recognizers.length, 0); assert.equal(f.state.phase, "stopped");
 });
 
 test("rapid mode changes retain only the latest permission attempt", async () => {
@@ -152,7 +152,7 @@ test("push-to-talk retains network errors after recognition ends", async () => {
 test("an interrupt handler that stops the session cannot dispatch a command", async () => {
   const f = fixture({ onInterrupt: () => f.session.stop() }); await f.start();
   f.result([["Hey Rio do not dispatch"]]); f.tick(20000);
-  assert.equal(f.state.phase, "idle"); assert.deepEqual(f.commands, []); assert.equal(f.timers.size, 0);
+  assert.equal(f.state.phase, "stopped"); assert.deepEqual(f.commands, []); assert.equal(f.timers.size, 0);
 });
 
 test("service errors without an end event terminate after a bounded fallback", async () => {
@@ -165,6 +165,29 @@ test("interim wake or stop hypotheses never interrupt TTS", async () => {
   const f = fixture(); await f.start("auto"); f.occupy();
   f.result([["stop", false]]); f.result([["Hey Rio", false]]); f.tick(2000);
   assert.equal(f.interrupts, 0); assert.deepEqual(f.commands, []); f.session.stop();
+});
+
+test("duplicate final events do not postpone a ready command", async () => {
+  const f = fixture(); await f.start(); f.result([["Hey Rio take a note"]]);
+  f.tick(1000); f.result([["Hey Rio take a note"]]); f.tick(200);
+  assert.deepEqual(f.commands, ["take a note"]); f.session.stop();
+});
+
+test("late results after a network error cannot submit", async () => {
+  const f = fixture(); await f.start(); f.recognizers[0].onerror({ error: "network" });
+  f.result([["Hey Rio stale command"]]); f.tick(1200);
+  assert.deepEqual(f.commands, []); f.session.stop();
+});
+
+test("interim-only sessions cannot reset the restart budget", async () => {
+  const f = fixture(); await f.start();
+  for (let i = 0; i < 5; i++) { f.result([["unfinished", false]]); f.recognizers.at(-1).onend(); f.tick(5000); }
+  assert.equal(f.state.phase, "error"); assert.equal(f.recognizers.length, 5);
+});
+
+test("start timeout never claims active listening", async () => {
+  const f = fixture(); await f.start(); f.tick(10000);
+  assert.equal(f.state.phase, "error"); assert.match(f.state.error, /start-timeout/); assert.equal(f.timers.size, 0);
 });
 
 test("fatal microphone error detaches callbacks and all timers", async () => {

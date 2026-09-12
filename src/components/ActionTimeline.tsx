@@ -14,6 +14,7 @@ const ICON: Record<ActionState["action"]["kind"], string> = {
   compose_message: "✉️",
   capture_screen: "🖥️",
   clipboard: "📋",
+  download_artifact: "File",
 };
 
 /**
@@ -52,9 +53,10 @@ export default function ActionTimeline({
                 </span>
               </div>
               {a.detail && <p className={`mt-0.5 break-words ${a.status === "failed" ? "text-rose-300/90" : "text-slate-400"}`}>{a.detail}</p>}
-              {(a.status === "pending" || a.status === "failed") && (a.action.kind === "open_url" || a.action.kind === "compose_message") && (
+              {a.action.kind === "download_artifact" && <details className="text-sm text-foreground"><summary>Review {a.action.format.toUpperCase()} content</summary><pre className="max-h-60 overflow-auto whitespace-pre-wrap text-sm">{a.action.content}</pre></details>}
+              {(a.status === "pending" || a.status === "failed") && (a.action.kind === "open_url" || a.action.kind === "compose_message" || a.action.kind === "download_artifact") && (
                 <button className="btn btn-ghost mt-1 !px-2.5 !py-1 text-[11px]" onClick={() => onRetry(a)}>
-                  ↗ Open it now
+                  {a.action.kind === "download_artifact" ? "Download" : "Open it now"}
                 </button>
               )}
             </div>

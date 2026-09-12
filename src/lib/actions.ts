@@ -13,7 +13,8 @@ export type ClientAction =
   | { kind: "open_url"; url: string; label: string }
   | { kind: "compose_message"; app: MessageApp; to: string; text: string; url: string; label: string }
   | { kind: "capture_screen"; question: string; label: string }
-  | { kind: "clipboard"; text: string; label: string };
+  | { kind: "clipboard"; text: string; label: string }
+  | { kind: "download_artifact"; title: string; format: "md" | "txt" | "xlsx" | "pdf"; content: string; label: string };
 
 export type MessageApp = "whatsapp" | "sms" | "email" | "telegram" | "slack";
 

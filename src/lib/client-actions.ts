@@ -71,9 +71,27 @@ async function grabScreenFrame(): Promise<string> {
  */
 export async function performAction(
   action: ClientAction,
-  opts: { confirm?: (a: ClientAction) => Promise<boolean> } = {},
+  opts: { confirm?: (a: ClientAction) => Promise<boolean>; userInitiated?: boolean } = {},
 ): Promise<{ ok: boolean; detail: string; needsTap?: boolean; screenshot?: string }> {
   switch (action.kind) {
+    case "download_artifact": {
+      if (!opts.userInitiated) return { ok: false, needsTap: true, detail: "Review this document, then tap Download. No file has been generated yet." };
+      try {
+        const response = await fetch("/api/files/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: action.title, format: action.format, content: action.content }), signal: AbortSignal.timeout(30000) });
+        if (!response.ok) { const error = await response.json(); return { ok: false, detail: error.error || "Export failed." }; }
+        const blob = await response.blob();
+        if (!blob.size) return { ok: false, detail: "Export returned an empty file." };
+        const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+        const hash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+        if (hash !== response.headers.get("x-artifact-sha256")) return { ok: false, detail: "Export checksum mismatch; download was blocked." };
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url; link.download = response.headers.get("content-disposition")?.match(/filename="([a-zA-Z0-9_.-]+)"/)?.[1] || `document.${action.format}`;
+        document.body.appendChild(link); link.click(); link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        return { ok: true, detail: `Generated ${blob.size.toLocaleString()} bytes; checksum verified. Download handed to the browser. Saving to disk cannot be verified. No cloud copy is retained.` };
+      } catch { return { ok: false, detail: "Document generation or download failed. You may retry this export." }; }
+    }
     case "open_url": {
       if (!isAllowedUrl(action.url)) {
         const ok = opts.confirm ? await opts.confirm(action) : false;
