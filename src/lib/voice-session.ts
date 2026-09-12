@@ -17,7 +17,9 @@ export const normalizeHeard = (text: string) => text.toLowerCase().replace(/[^\p
 export function matchesWake(heard: string, phrase: string): { hit: boolean; rest: string } {
   const tokens = [...heard.matchAll(/[\p{L}\p{N}]+/gu)];
   const wake = normalizeHeard(phrase) || "hey rio";
-  const variants = wake === "hey rio" ? ["hey rio", "hey reo", "hey ryo"] : [wake];
+  const variants = wake === "hey rio"
+    ? ["hey rio", "hey reo", "hey ryo", "hey riyō", "a rio", "hey jarvis", "okay rio", "ok rio"]
+    : [wake, wake.replace(/^hey\s+/u, "okay "), wake.replace(/^hey\s+/u, "ok ")];
   for (let i = 0; i < tokens.length; i++) {
     for (const variant of variants) {
       const words = variant.split(" ");
@@ -195,10 +197,10 @@ export class VoiceSession {
     rec.onerror = (event) => {
       if (!current()) return;
       failure = event.error;
-      if (!["network", "no-speech", "aborted"].includes(failure)) { this.fail(failure); return; }
+      if (!["network", "no-speech", "aborted", "audio-capture", "service-not-allowed"].includes(failure)) { this.fail(failure); return; }
       this.clear(this.silence);
       this.update({ phase: "restarting", error: failure === "network" ? voiceError(failure) : "" });
-      this.later(() => { if (current()) rec.onend?.(); }, 1000);
+      this.later(() => { if (current()) rec.onend?.(); }, mode === "wake" ? 450 : 1000);
     };
     rec.onend = () => {
       if (!current()) return;
@@ -208,6 +210,13 @@ export class VoiceSession {
       this.detach();
       if (mode === "once") { if (failure === "network") this.fail(failure); else this.stop("idle"); return; }
       this.retries = hadResults && !failure ? 0 : this.retries + 1;
+      // Wake mode is intentionally long-lived. Chrome ends recognition after silence or
+      // service hiccups; never turn that normal lifecycle event into a permanent failure.
+      if (mode === "wake") {
+        this.update({ phase: "restarting", command: "", error: failure === "network" ? voiceError(failure) : "" });
+        this.later(() => this.open(), Math.min(350 * 2 ** Math.min(this.retries, 4), 4000));
+        return;
+      }
       if (this.retries > 4) { this.fail(failure || "repeated-session-end"); return; }
       this.update({ phase: "restarting", command: "" });
       this.later(() => this.open(), Math.min(400 * 2 ** this.retries, 5000));
