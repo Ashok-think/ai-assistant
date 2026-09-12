@@ -434,15 +434,9 @@ export default function Home() {
         const reader = res.body.getReader();
         const dec = new TextDecoder();
         let buf = "";
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buf += dec.decode(value, { stream: true });
-          const parts = buf.split("\n\n");
-          buf = parts.pop() ?? "";
-          for (const p of parts) {
+        const handleFrame = (p: string) => {
             if (responseGeneration !== responseGenerationRef.current || ctl.signal.aborted) return;
-            if (!p.startsWith("data: ")) continue;
+            if (!p.startsWith("data: ")) return;
             const ev = JSON.parse(p.slice(6));
             if (ev.type === "route") {
               setRoute(ev.decision);
@@ -451,20 +445,15 @@ export default function Home() {
             else if (ev.type === "intent") {
               if (ev.isAction) setStatus(`⚡ ${ev.intent}`);
             } else if (ev.type === "delta") {
-              // First token means the wait is over — drop the typing dots and grow the bubble.
               if (!firstTokenAt) { firstTokenAt = performance.now(); setLatency((l) => ({ ...(l ?? {}), firstToken: Math.round(firstTokenAt - reqStart) })); }
               setStatus("");
               setMsgs((m) => m.map((x) => (x.id === pendingId ? { ...x, pending: false, content: x.content + ev.text } : x)));
             } else if (ev.type === "restart") {
-              // A provider died partway through. Clear its half-sentence so the fallback's reply
-              // doesn't get glued onto it.
               setMsgs((m) => m.map((x) => (x.id === pendingId ? { ...x, pending: true, content: "" } : x)));
             } else if (ev.type === "quota") {
-              // Precise provider limit message (not a generic "failed").
               setProviderLimit(ev.message);
               pushToast("quota", ev.message);
             } else if (ev.type === "action_step") {
-              // Real agent step from the orchestrator — drives the character state machine + log.
               setAgentStep(ev.status as AgentStep);
               const running = ev.status === "planning" || ev.status === "searching" || ev.status === "executing" || ev.status === "verifying";
               setAgentLog((l) => {
@@ -478,7 +467,6 @@ export default function Home() {
               tools.push({ name: ev.name, args: ev.args, result: ev.result });
               setAgentTool(ev.name);
               setStatus(`🔧 ${ev.name}`);
-              // Log real tool executions (esp. pc_* browser actions) with their result.
               setAgentLog((l) => [...l.slice(-9), { id: `tl-${Date.now()}-${l.length}`, icon: ev.name.startsWith("pc_") ? "🌐" : "🔧", text: ev.name, status: /couldn't|could not|failed|error|not on the allowlist|did not load|unable/i.test(ev.result) ? "failed" : "done", detail: String(ev.result).slice(0, 140), at: Date.now() }]);
               setMsgs((m) => m.map((x) => (x.id === pendingId ? { ...x, toolCalls: [...tools] } : x)));
             } else if (ev.type === "final") {
@@ -486,13 +474,7 @@ export default function Home() {
               window.localStorage.setItem("convId", String(ev.conversationId));
               const em = ev.message.emotion as AvatarEmotion;
               setEmotion(em);
-              setMsgs((m) =>
-                m.map((x) =>
-                  x.id === pendingId
-                    ? { ...x, pending: false, content: ev.message.content, emotion: em, model: ev.message.model, tier: ev.message.tier, costUsd: ev.message.costUsd, tokensIn: ev.message.tokensIn, tokensOut: ev.message.tokensOut, toolCalls: ev.message.toolCalls, characterName: stateRef.current?.character.name }
-                    : x,
-                ),
-              );
+              setMsgs((m) => m.map((x) => x.id === pendingId ? { ...x, pending: false, content: ev.message.content, emotion: em, model: ev.message.model, tier: ev.message.tier, costUsd: ev.message.costUsd, tokensIn: ev.message.tokensIn, tokensOut: ev.message.tokensOut, toolCalls: ev.message.toolCalls, characterName: stateRef.current?.character.name } : x));
               setStatus("");
               setLatency((l) => ({ ...(l ?? {}), total: Math.round(performance.now() - reqStart) }));
               say(ev.message.content, em, reqStart);
@@ -501,8 +483,17 @@ export default function Home() {
               setMsgs((m) => m.map((x) => (x.id === pendingId ? { ...x, pending: false, content: `Oops: ${ev.error}`, emotion: "sad" } : x)));
               setEmotion("sad");
             }
-          }
+          };
+        while (true) {
+          const { value, done } = await reader.read();
+          buf += value ? dec.decode(value, { stream: !done }) : "";
+          const parts = buf.split("\n\n");
+          buf = parts.pop() ?? "";
+          for (const p of parts) handleFrame(p);
+          if (done) break;
         }
+        const finalChunk = buf.trim();
+        if (finalChunk) handleFrame(finalChunk);
       } catch (e) {
         // A barge-in abort is intentional — leave whatever was said and quietly stop.
         if (e instanceof DOMException && e.name === "AbortError") {
