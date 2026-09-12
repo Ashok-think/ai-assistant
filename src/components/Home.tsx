@@ -163,7 +163,7 @@ export default function Home() {
 
   const retryAction = useCallback(async (a: ActionState) => {
     // This runs from a real click, so the popup blocker lets it through.
-    const r = await performAction(a.action);
+    const r = await performAction(a.action, { userInitiated: true });
     setActions((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: r.ok ? "done" : "failed", detail: r.detail } : x)));
   }, []);
 
@@ -499,7 +499,7 @@ export default function Home() {
     isOccupied: () => speakingRef.current || busyRef.current,
   });
   const listening = voice.phase === "wake-listening" || voice.phase === "capturing";
-  const voiceActive = voice.phase !== "idle" && voice.phase !== "error";
+  const voiceActive = !["idle", "stopped", "error"].includes(voice.phase);
   const wakeArmed = voiceActive && voice.mode === "wake";
   const autoListen = voiceActive && voice.mode === "auto";
   const interim = voice.command;
@@ -598,7 +598,7 @@ export default function Home() {
               : <>Enable Wake, then say <span className="text-primary">“{state.settings.wakeWord}”</span>. Your microphone stays off until enabled.</>}
           </p>
 
-          <VoiceDiagnostics voice={voice} phrase={state.settings.wakeWord || "hey rio"} stop={stopListening} retry={() => startListening("wake")} />
+          <VoiceDiagnostics voice={voice} phrase={state.settings.wakeWord || "hey rio"} language={state.settings.language} stop={stopListening} retry={() => startListening("wake")} pushToTalk={() => startListening("once")} />
           <details className="engine-details"><summary>Under the hood <SlidersHorizontal size={14} /></summary>
           {/* Router HUD */}
           <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-3">

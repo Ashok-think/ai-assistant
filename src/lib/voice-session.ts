@@ -1,5 +1,5 @@
 export type VoiceMode = "once" | "wake" | "auto";
-export type VoicePhase = "idle" | "permission" | "starting" | "wake-listening" | "capturing" | "restarting" | "error";
+export type VoicePhase = "idle" | "permission" | "starting" | "wake-listening" | "capturing" | "restarting" | "stopped" | "error";
 export type VoiceSnapshot = { phase: VoicePhase; mode: VoiceMode | null; permission: "unknown" | "granted" | "denied"; heard: string; command: string; error: string };
 export type RecognitionResults = ArrayLike<{ isFinal: boolean; 0: { transcript: string } }>;
 export type Recognizer = {
@@ -89,21 +89,21 @@ export class VoiceSession {
     this.recognition = null;
     if (rec) { rec.onstart = rec.onend = rec.onerror = rec.onresult = null; try { rec.abort(); } catch { /* Already ended. */ } }
   }
-  stop() {
+  stop(phase: "idle" | "stopped" = "stopped") {
     this.generation++;
     this.timers.forEach((timer) => (this.options.clearTimer ?? clearTimeout)(timer));
     this.timers.clear();
     this.silence = null;
     this.awakeUntil = 0;
     this.detach();
-    this.update({ phase: "idle", mode: null, command: "", error: "" });
+    this.update({ phase, mode: null, command: "", error: "" });
   }
   private fail(code: string) {
-    this.stop();
+    this.stop("idle");
     this.update({ phase: "error", error: voiceError(code), ...(["NotAllowedError", "not-allowed", "service-not-allowed"].includes(code) ? { permission: "denied" as const } : {}) });
   }
   async start(mode: VoiceMode, phrase: string, language: string) {
-    this.stop();
+    this.stop("idle");
     this.settings = { mode, phrase, language };
     this.retries = 0;
     const generation = this.generation;
@@ -134,6 +134,7 @@ export class VoiceSession {
     let consumed = "";
     let interrupted = false;
     let hadResults = false;
+    let lastResult = "";
     let failure = "";
     const capturing = () => mode !== "wake" || this.awakeUntil > this.now();
     const command = (text: string) => {
@@ -149,15 +150,18 @@ export class VoiceSession {
       this.awakeUntil = 0;
       this.clear(this.silence);
       this.detach();
-      if (mode === "once") this.stop();
+      if (mode === "once") this.stop("idle");
       else { this.update({ phase: "restarting", command: "" }); this.later(() => this.open(), 350); }
       this.options.onCommand(text);
     };
     rec.onstart = () => { if (current()) this.update({ phase: capturing() ? "capturing" : "wake-listening", error: "" }); };
     rec.onresult = (event) => {
-      if (!current()) return;
-      hadResults = true;
+      if (!current() || failure) return;
       const result = readTranscript(event.results);
+      const fingerprint = JSON.stringify(result);
+      if (fingerprint === lastResult) return;
+      lastResult = fingerprint;
+      hadResults ||= Boolean(result.final);
       const heard = [result.final, result.interim].filter(Boolean).join(" ");
       this.update({ heard });
       const remaining = result.final.startsWith(consumed) ? result.final.slice(consumed.length).trim() : result.final;
@@ -202,7 +206,7 @@ export class VoiceSession {
       if (!failure) submit();
       if (!current()) return;
       this.detach();
-      if (mode === "once") { if (failure === "network") this.fail(failure); else this.stop(); return; }
+      if (mode === "once") { if (failure === "network") this.fail(failure); else this.stop("idle"); return; }
       this.retries = hadResults && !failure ? 0 : this.retries + 1;
       if (this.retries > 4) { this.fail(failure || "repeated-session-end"); return; }
       this.update({ phase: "restarting", command: "" });

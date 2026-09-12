@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit",
     "smoke": "node scripts/smoke.mjs",
     "test:cloud": "node --experimental-strip-types --test scripts/cloud-unit.test.mjs",
+    "test:voice": "node --experimental-strip-types --test scripts/voice-unit.test.mjs",
+    "test:artifacts": "node --experimental-strip-types --test scripts/artifacts-unit.test.mjs",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },
@@ -21,10 +23,12 @@
     "ai": "^7.0.97",
     "dotenv": "17.3.1",
     "drizzle-orm": "0.45.2",
+    "exceljs": "4.4.0",
     "lucide-react": "^0.546.0",
     "mammoth": "^1.12.2",
     "motion": "^12.23.24",
     "next": "16.3.4",
+    "pdf-lib": "1.17.1",
     "pdf-parse": "^2.4.5",
     "pixi-live2d-display": "^0.4.0",
     "pixi.js": "^7.4.3",
@@ -34,6 +38,7 @@
     "swr": "^2.5.1"
   },
   "overrides": {
+    "exceljs": { "uuid": "11.1.1" },
     "pixi-live2d-display": {
       "gh-pages": "6.3.0"
     }
